@@ -2,6 +2,7 @@ __author__ = 'Matt David'
 
 import hashlib
 import json
+import os
 import requests
 import time
 import unittest
@@ -13,6 +14,7 @@ from OpenSSL import crypto
 from Crypto.Cipher import AES
 
 from addressimo.config import config
+from addressimo.crypto import HMAC_DRBG
 from addressimo.data import IdObject
 from addressimo.plugin import PluginManager
 from addressimo.paymentrequest.paymentrequest_pb2 import PaymentRequest, PaymentDetails
@@ -199,11 +201,12 @@ class PRRFunctionalTest(LiveServerTestCase):
         sending_pubkey = VerifyingKey.from_string(resp_json.get('requests')[0]['sender_pubkey'].decode('hex'), curve=curves.SECP256k1)
         ecdh_point = self.receiver_sk.privkey.secret_multiplier * sending_pubkey.pubkey.point
 
-        # Encrypt PR
-        # TODO: Perhaps we should use ECIES here? Unfortunately it's not as secure as AES256
-        secret_key = hashlib.sha256(str(ecdh_point.x())).digest()
-
-        encrypt_obj = AES.new(secret_key, AES.MODE_ECB)
+        # Encrypt PR using HMAC-DRBG
+        nonce = self.receiver_sk.get_verifying_key().to_string()
+        drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=nonce)
+        encryption_key = drbg.generate(32)
+        iv = drbg.generate(16)
+        encrypt_obj = AES.new(encryption_key, AES.MODE_CBC, iv)
         ciphertext = encrypt_obj.encrypt(pad(self.serialized_pr))
 
         self.assertEqual(self.payment_id, resp_json.get('requests')[0]['id'])
@@ -255,10 +258,12 @@ class PRRFunctionalTest(LiveServerTestCase):
         decrypt_ecdh_point = self.sender_sk.privkey.secret_multiplier * receiving_pubkey.pubkey.point
 
         # Decrypt PR
-        # TODO: Perhaps we should use ECIES here? Unfortunately it's not as secure as AES256
-        secret_key = hashlib.sha256(str(decrypt_ecdh_point.x())).digest()
+        nonce = resp_json.get('receiver_pubkey').decode('hex')
+        drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=nonce)
+        encryption_key = drbg.generate(32)
+        iv = drbg.generate(16)
 
-        decrypt_obj = AES.new(secret_key, AES.MODE_ECB)
+        decrypt_obj = AES.new(encryption_key, AES.MODE_CBC, iv)
         decrypt_ciphertext = unpad(decrypt_obj.decrypt(resp_json.get('encrypted_payment_request').decode('hex')))
         self.assertEqual(self.serialized_pr, decrypt_ciphertext)
 
