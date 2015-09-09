@@ -130,7 +130,7 @@ The process that defines this interaction is described here:
 6. Receiver generates a secret key for PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman)
 7. Receiver generates encryption key and initialization vector using [HMAC_DRBG](http://csrc.nist.gov/publications/nistpubs/800-90A/SP800-90A.pdf) also referenced in [RFC6979](https://tools.ietf.org/html/rfc6979) in the following way:
     * HMAC_DRBG Initialization Entropy is set to the secret key generated in Step 6
-    * HMAC_DRBG InitializationNonce is set to receiver's public key
+    * HMAC_DRBG Initialization Nonce is set to receiver's public key
     * Encryption Key = HMAC_DRBG.GENERATE(32) - 256 bits
     * IV = HMAC_DRBG.GENERATE(16) - 128 bits
 8. Receiver encrypts the PaymentRequest using AES-256-CBC using the generated Encryption Key and IV.
