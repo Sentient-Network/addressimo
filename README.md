@@ -126,17 +126,28 @@ The process that defines this interaction is described here:
 2. Sender receives a 202 Accepted response with a Location header that will eventually point to a newly returned and encrypted PaymentRequest (RPR)
 3. Receiver polls *Addressimo* for queued requests for PaymentRequests
 4. Receiver receives queued requests that include the sender's public key
-5. Receiver creates a PaymentRequest
-6. Receiver generates a secret key for PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman)
+5. Receiver creates the PaymentRequest to be returned to the sender and then provides a hash authentication using the steps provided below
+    * Set *NEW payment_request_hash* field **(to be defined in PRR Extension BIP)** to empty string ("")
+    * Get SHA256 hash of serialized PaymentRequest
+    * Set *NEW payment_request_hash* field **(to be defined in PRR Extension BIP)** in newly generated PaymentRequest
+6. Receiver generates a secret exponent for PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman)
 7. Receiver generates encryption key and initialization vector using [HMAC_DRBG](http://csrc.nist.gov/publications/nistpubs/800-90A/SP800-90A.pdf) also referenced in [RFC6979](https://tools.ietf.org/html/rfc6979) in the following way:
-    * HMAC_DRBG Initialization Entropy is set to the secret key generated in Step 6
+    * HMAC_DRBG Initialization Entropy is set to the secret exponent generated in Step 6
     * HMAC_DRBG Initialization Nonce is set to receiver's public key
     * Encryption Key = HMAC_DRBG.GENERATE(32) - 256 bits
     * IV = HMAC_DRBG.GENERATE(16) - 128 bits
 8. Receiver encrypts the PaymentRequest using AES-256-CBC using the generated Encryption Key and IV.
 9. Receiver submits the encrypted PaymentRequest to *Addressimo*
+    * Includes public key of the ECDH generated **ephemeral_pubkey**
+    * **NOTE:** The ephemeral_pubkey is the public key belonging to an EC (SECP256K1) keypair where the exponent of the private key is the secret exponent derived in Step 6.
 10. Sender polls *Addressimo* URL returned in Step 2 for PaymentRequest retrieval
-11. Sender receives PaymentRequest and decrypts using AES-256-CBC and the steps described in steps 6 and 7
+11. Sender receives PaymentRequest
+12. Sender determines ECDH ephemeral key using the flow described in Step 6
+13. Sender validates the retrieved ephemeral_public_key against its own ECDH-determined keypair's public key
+14. Sender decrypts using AES-256-CBC and the parameters described in Step 7
+15. Sender validates *payment_request_hash* using the reverse of the flow described in Step 5.
+
+An example of this flow can be seen in **functest/functest_prr.py**
 
 ### Systemic Improvements
 

@@ -194,6 +194,9 @@ class PRRFunctionalTest(LiveServerTestCase):
         pr.pki_data = ''
         pr.serialized_payment_details = pd.SerializeToString()
         pr.signature = 'testforme'
+        pr.payment_request_hash = ''
+
+        pr.payment_request_hash = hashlib.sha256(pr.SerializeToString()).digest()
 
         self.serialized_pr = pr.SerializeToString()
 
@@ -209,6 +212,9 @@ class PRRFunctionalTest(LiveServerTestCase):
         encrypt_obj = AES.new(encryption_key, AES.MODE_CBC, iv)
         ciphertext = encrypt_obj.encrypt(pad(self.serialized_pr))
 
+        # Get Public Key from ECDH Point
+        ecdh_key = SigningKey.from_secret_exponent(ecdh_point.x(), curve=curves.SECP256k1)
+
         self.assertEqual(self.payment_id, resp_json.get('requests')[0]['id'])
 
         submit_rpr_data = {
@@ -216,10 +222,12 @@ class PRRFunctionalTest(LiveServerTestCase):
                 {
                     "id": resp_json.get('requests')[0]['id'],
                     "receiver_pubkey": self.receiver_sk.get_verifying_key().to_string().encode('hex'),
-                    "encrypted_payment_request": ciphertext.encode('hex')
+                    "encrypted_payment_request": ciphertext.encode('hex'),
+                    "ephemeral_pubkey": ecdh_key.get_verifying_key().to_string().encode('hex')
                 }
             ]
         }
+
         sign_url = "%s/address/testid/prr" % self.get_server_url()
         msg_sig = self.receiver_sk.sign(sign_url + json.dumps(submit_rpr_data))
 
@@ -256,6 +264,10 @@ class PRRFunctionalTest(LiveServerTestCase):
         # Determine ECDH Shared Key
         receiving_pubkey = VerifyingKey.from_string(resp_json.get('receiver_pubkey').decode('hex'), curve=curves.SECP256k1)
         decrypt_ecdh_point = self.sender_sk.privkey.secret_multiplier * receiving_pubkey.pubkey.point
+        ecdh_key = SigningKey.from_secret_exponent(decrypt_ecdh_point.x(), curve=curves.SECP256k1)
+
+        # Validate ECDH-derived keypair's pubkey equals the given ephemeral pubkey
+        self.assertEqual(ecdh_key.get_verifying_key().to_string().encode('hex'), resp_json.get('ephemeral_pubkey'))
 
         # Decrypt PR
         nonce = resp_json.get('receiver_pubkey').decode('hex')
@@ -274,6 +286,14 @@ class PRRFunctionalTest(LiveServerTestCase):
         self.assertEqual('', rpr.pki_data)
         self.assertEqual(pd.SerializeToString(), rpr.serialized_payment_details)
         self.assertEqual('testforme', rpr.signature)
+
+        # Authenticate PR Hash
+        test_rpr = PaymentRequest()
+        test_rpr.ParseFromString(decrypt_ciphertext)
+        test_rpr.payment_request_hash = ''
+        compare_hash = hashlib.sha256(test_rpr.SerializeToString()).digest()
+
+        self.assertEqual(compare_hash, rpr.payment_request_hash)
 
 if __name__ == '__main__':
     unittest.main()

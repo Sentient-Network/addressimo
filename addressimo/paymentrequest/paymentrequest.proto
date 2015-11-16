@@ -30,6 +30,7 @@ message PaymentRequest {
         optional bytes pki_data = 3;                      // depends on pki_type
         required bytes serialized_payment_details = 4;    // PaymentDetails
         optional bytes signature = 5;                     // pki-dependent signature
+        optional bytes payment_request_hash = 1000;       // Encrypted PaymentRequest Authentication Hash
 }
 message X509Certificates {
         repeated bytes certificate = 1;    // DER-encoded X.509 certificate chain

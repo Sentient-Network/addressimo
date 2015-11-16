@@ -128,10 +128,10 @@ class PRR:
         for ready_request in ready_request_list:
 
             # Validate Ready Request
-            required_fields = {'id', 'receiver_pubkey', 'encrypted_payment_request'}
+            required_fields = {'id', 'receiver_pubkey', 'encrypted_payment_request', 'ephemeral_pubkey'}
             if not required_fields.issubset(set(ready_request.keys())):
                 log.warn("Ready Request Missing Required Fields: id and/or encrypted_payment_request")
-                failures[ready_request['id']].append('Missing Required Fields: id, receiver_pubkey, and/or encrypted_payment_request')
+                failures[ready_request['id']].append('Missing Required Fields: id, receiver_pubkey, ephemeral_pubkey and/or encrypted_payment_request')
                 continue
 
             # Add Return PR to Redis for later retrieval
@@ -171,7 +171,8 @@ class PRR:
 
             return_data = {
                 "encrypted_payment_request": return_pr['encrypted_payment_request'],
-                "receiver_pubkey": return_pr['receiver_pubkey']
+                "receiver_pubkey": return_pr['receiver_pubkey'],
+                "ephemeral_pubkey": return_pr['ephemeral_pubkey']
             }
 
             return create_json_response(data=return_data)
