@@ -13,7 +13,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='paymentrequest.proto',
   package='payments',
-  serialized_pb='\n\x14paymentrequest.proto\x12\x08payments\"+\n\x06Output\x12\x11\n\x06\x61mount\x18\x01 \x01(\x04:\x01\x30\x12\x0e\n\x06script\x18\x02 \x02(\x0c\"\xa3\x01\n\x0ePaymentDetails\x12\x15\n\x07network\x18\x01 \x01(\t:\x04main\x12!\n\x07outputs\x18\x02 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04time\x18\x03 \x02(\x04\x12\x0f\n\x07\x65xpires\x18\x04 \x01(\x04\x12\x0c\n\x04memo\x18\x05 \x01(\t\x12\x13\n\x0bpayment_url\x18\x06 \x01(\t\x12\x15\n\rmerchant_data\x18\x07 \x01(\x0c\"\xb4\x01\n\x0ePaymentRequest\x12\"\n\x17payment_details_version\x18\x01 \x01(\r:\x01\x31\x12\x16\n\x08pki_type\x18\x02 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x03 \x01(\x0c\x12\"\n\x1aserialized_payment_details\x18\x04 \x02(\x0c\x12\x11\n\tsignature\x18\x05 \x01(\x0c\x12\x1d\n\x14payment_request_hash\x18\xe8\x07 \x01(\x0c\"\'\n\x10X509Certificates\x12\x13\n\x0b\x63\x65rtificate\x18\x01 \x03(\x0c\"i\n\x07Payment\x12\x15\n\rmerchant_data\x18\x01 \x01(\x0c\x12\x14\n\x0ctransactions\x18\x02 \x03(\x0c\x12#\n\trefund_to\x18\x03 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04memo\x18\x04 \x01(\t\">\n\nPaymentACK\x12\"\n\x07payment\x18\x01 \x02(\x0b\x32\x11.payments.Payment\x12\x0c\n\x04memo\x18\x02 \x01(\tB(\n\x1eorg.bitcoin.protocols.paymentsB\x06Protos')
+  serialized_pb='\n\x14paymentrequest.proto\x12\x08payments\"+\n\x06Output\x12\x11\n\x06\x61mount\x18\x01 \x01(\x04:\x01\x30\x12\x0e\n\x06script\x18\x02 \x02(\x0c\"\xa3\x01\n\x0ePaymentDetails\x12\x15\n\x07network\x18\x01 \x01(\t:\x04main\x12!\n\x07outputs\x18\x02 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04time\x18\x03 \x02(\x04\x12\x0f\n\x07\x65xpires\x18\x04 \x01(\x04\x12\x0c\n\x04memo\x18\x05 \x01(\t\x12\x13\n\x0bpayment_url\x18\x06 \x01(\t\x12\x15\n\rmerchant_data\x18\x07 \x01(\x0c\"\x95\x01\n\x0ePaymentRequest\x12\"\n\x17payment_details_version\x18\x01 \x01(\r:\x01\x31\x12\x16\n\x08pki_type\x18\x02 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x03 \x01(\x0c\x12\"\n\x1aserialized_payment_details\x18\x04 \x02(\x0c\x12\x11\n\tsignature\x18\x05 \x01(\x0c\"\'\n\x10X509Certificates\x12\x13\n\x0b\x63\x65rtificate\x18\x01 \x03(\x0c\"i\n\x07Payment\x12\x15\n\rmerchant_data\x18\x01 \x01(\x0c\x12\x14\n\x0ctransactions\x18\x02 \x03(\x0c\x12#\n\trefund_to\x18\x03 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04memo\x18\x04 \x01(\t\">\n\nPaymentACK\x12\"\n\x07payment\x18\x01 \x02(\x0b\x32\x11.payments.Payment\x12\x0c\n\x04memo\x18\x02 \x01(\t\"\x92\x01\n\x14ReturnPaymentRequest\x12!\n\x19\x65ncrypted_payment_request\x18\x01 \x02(\x0c\x12\x1b\n\x13receiver_public_key\x18\x02 \x02(\x0c\x12\x1c\n\x14\x65phemeral_public_key\x18\x03 \x02(\x0c\x12\x1c\n\x14payment_request_hash\x18\x04 \x02(\x0c\x42(\n\x1eorg.bitcoin.protocols.paymentsB\x06Protos')
 
 
 
@@ -165,13 +165,6 @@ _PAYMENTREQUEST = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
-    _descriptor.FieldDescriptor(
-      name='payment_request_hash', full_name='payments.PaymentRequest.payment_request_hash', index=5,
-      number=1000, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value="",
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
   ],
   extensions=[
   ],
@@ -182,7 +175,7 @@ _PAYMENTREQUEST = _descriptor.Descriptor(
   is_extendable=False,
   extension_ranges=[],
   serialized_start=246,
-  serialized_end=426,
+  serialized_end=395,
 )
 
 
@@ -209,8 +202,8 @@ _X509CERTIFICATES = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=428,
-  serialized_end=467,
+  serialized_start=397,
+  serialized_end=436,
 )
 
 
@@ -258,8 +251,8 @@ _PAYMENT = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=469,
-  serialized_end=574,
+  serialized_start=438,
+  serialized_end=543,
 )
 
 
@@ -293,8 +286,57 @@ _PAYMENTACK = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=576,
-  serialized_end=638,
+  serialized_start=545,
+  serialized_end=607,
+)
+
+
+_RETURNPAYMENTREQUEST = _descriptor.Descriptor(
+  name='ReturnPaymentRequest',
+  full_name='payments.ReturnPaymentRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='encrypted_payment_request', full_name='payments.ReturnPaymentRequest.encrypted_payment_request', index=0,
+      number=1, type=12, cpp_type=9, label=2,
+      has_default_value=False, default_value="",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='receiver_public_key', full_name='payments.ReturnPaymentRequest.receiver_public_key', index=1,
+      number=2, type=12, cpp_type=9, label=2,
+      has_default_value=False, default_value="",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='ephemeral_public_key', full_name='payments.ReturnPaymentRequest.ephemeral_public_key', index=2,
+      number=3, type=12, cpp_type=9, label=2,
+      has_default_value=False, default_value="",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='payment_request_hash', full_name='payments.ReturnPaymentRequest.payment_request_hash', index=3,
+      number=4, type=12, cpp_type=9, label=2,
+      has_default_value=False, default_value="",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  extension_ranges=[],
+  serialized_start=610,
+  serialized_end=756,
 )
 
 _PAYMENTDETAILS.fields_by_name['outputs'].message_type = _OUTPUT
@@ -306,6 +348,7 @@ DESCRIPTOR.message_types_by_name['PaymentRequest'] = _PAYMENTREQUEST
 DESCRIPTOR.message_types_by_name['X509Certificates'] = _X509CERTIFICATES
 DESCRIPTOR.message_types_by_name['Payment'] = _PAYMENT
 DESCRIPTOR.message_types_by_name['PaymentACK'] = _PAYMENTACK
+DESCRIPTOR.message_types_by_name['ReturnPaymentRequest'] = _RETURNPAYMENTREQUEST
 
 class Output(_message.Message):
   __metaclass__ = _reflection.GeneratedProtocolMessageType
@@ -342,6 +385,12 @@ class PaymentACK(_message.Message):
   DESCRIPTOR = _PAYMENTACK
 
   # @@protoc_insertion_point(class_scope:payments.PaymentACK)
+
+class ReturnPaymentRequest(_message.Message):
+  __metaclass__ = _reflection.GeneratedProtocolMessageType
+  DESCRIPTOR = _RETURNPAYMENTREQUEST
+
+  # @@protoc_insertion_point(class_scope:payments.ReturnPaymentRequest)
 
 
 DESCRIPTOR.has_options = True

@@ -426,10 +426,22 @@ class TestSubmitReturnPr(AddressimoTestCase):
         self.mockDatetime = self.patcher4.start()
 
         # Setup Go Right Data
+        rpr1 = ReturnPaymentRequest()
+        rpr1.encrypted_payment_request = 'encrypted_payment_request'.encode('hex')
+        rpr1.receiver_public_key = 'receiver_public_key'.encode('hex')
+        rpr1.ephemeral_public_key = 'ephemeral_public_key'.encode('hex')
+        rpr1.payment_request_hash = 'payment_request_hash'.encode('hex')
+
+        rpr2 = ReturnPaymentRequest()
+        rpr2.encrypted_payment_request = 'encrypted_payment_request'.encode('hex')
+        rpr2.receiver_public_key = 'receiver_public_key'.encode('hex')
+        rpr2.ephemeral_public_key = 'ephemeral_public_key'.encode('hex')
+        rpr2.payment_request_hash = 'payment_request_hash'.encode('hex')
+
         self.mockRequest.get_json.return_value = {
             "ready_requests": [
-                {"id":"id1", "receiver_pubkey":"thisismypubkey", "encrypted_payment_request":"pr1"},
-                {"id":"id2", "receiver_pubkey":"alsoThisIsMyPubKey", "encrypted_payment_request":"pr2"},
+                {"id":"id1", "return_payment_request": rpr1.SerializeToString().encode('hex')},
+                {"id":"id2", "return_payment_request": rpr2.SerializeToString().encode('hex')},
             ]
         }
 
@@ -585,9 +597,9 @@ class TestSubmitReturnPr(AddressimoTestCase):
         self.assertEqual('Missing or Empty ready_requests list', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
 
-    def test_missing_required_field(self):
+    def test_missing_id_required_field(self):
 
-        del self.mockRequest.get_json.return_value['ready_requests'][0]['receiver_pubkey']
+        del self.mockRequest.get_json.return_value['ready_requests'][0]['id']
 
         PRR.submit_return_pr('test_id')
 
@@ -612,7 +624,37 @@ class TestSubmitReturnPr(AddressimoTestCase):
         self.assertEqual('Submitted Return PaymentRequests contain errors, please see failures field for more information', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
         self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['accept_count'])
-        self.assertEqual('Missing Required Fields: id, receiver_pubkey, and/or encrypted_payment_request', self.mockCreateJsonResponse.call_args[0][3]['failures']['id1'][0])
+        self.assertEqual('Missing ready_request id field', self.mockCreateJsonResponse.call_args[0][3]['failures']['unknown'][0])
+
+    def test_missing_rpr_required_field(self):
+
+        del self.mockRequest.get_json.return_value['ready_requests'][0]['return_payment_request']
+
+        PRR.submit_return_pr('test_id')
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_json.call_count)
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.add_return_pr.call_count)
+
+        add_pr_call = self.mockPluginManager.get_plugin.return_value.add_return_pr
+        json_data = self.mockRequest.get_json.return_value
+
+        self.assertNotIn('submit_data', json_data['ready_requests'][0])
+        self.assertEqual('utcnow', json_data['ready_requests'][1]['submit_date'])
+        self.assertEqual(json_data['ready_requests'][1], add_pr_call.call_args[0][0])
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.delete_prr.call_count)
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_prr.call_args[0][0])
+        self.assertEqual('id2', self.mockPluginManager.get_plugin.return_value.delete_prr.call_args[0][1])
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
+        self.assertEqual('Submitted Return PaymentRequests contain errors, please see failures field for more information', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
+        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['accept_count'])
+        self.assertEqual('Missing Required Field return_payment_request', self.mockCreateJsonResponse.call_args[0][3]['failures']['id1'][0])
+
 
     def test_add_return_pr_exception(self):
 
@@ -677,14 +719,15 @@ class TestGetReturnPr(AddressimoTestCase):
     def setUp(self):
 
         self.patcher1 = patch('addressimo.paymentrequest.prr.PluginManager')
-        self.patcher2 = patch('addressimo.paymentrequest.prr.create_json_response')
+        self.patcher2 = patch('addressimo.paymentrequest.prr.Response')
+        self.patcher3 = patch('addressimo.paymentrequest.prr.create_json_response')
 
         self.mockPluginManager = self.patcher1.start()
-        self.mockCreateJsonResponse = self.patcher2.start()
+        self.mockResponse = self.patcher2.start()
+        self.mockCreateJsonResponse = self.patcher3.start()
 
         self.mockPluginManager.get_plugin.return_value.get_return_pr.return_value = {
-            'encrypted_payment_request': 'im_encrypted',
-            'receiver_pubkey': 'HereIsMyPubkey'
+            'return_payment_request': 'return_payment_request'.encode('hex')
         }
 
     def test_go_right(self):
@@ -696,11 +739,11 @@ class TestGetReturnPr(AddressimoTestCase):
         self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.get_return_pr.call_count)
         self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.get_return_pr.call_args[0][0])
 
-        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
-        self.assertIn('encrypted_payment_request', self.mockCreateJsonResponse.call_args[1]['data'])
-        self.assertEqual('im_encrypted', self.mockCreateJsonResponse.call_args[1]['data']['encrypted_payment_request'])
-        self.assertIn('receiver_pubkey', self.mockCreateJsonResponse.call_args[1]['data'])
-        self.assertEqual('HereIsMyPubkey', self.mockCreateJsonResponse.call_args[1]['data']['receiver_pubkey'])
+        self.assertEqual(1, self.mockResponse.call_count)
+        self.assertEqual('return_payment_request', self.mockResponse.call_args[1]['response'])
+        self.assertEqual(200, self.mockResponse.call_args[1]['status'])
+        self.assertEqual('application/bitcoin-returnpaymentrequest', self.mockResponse.call_args[1]['mimetype'])
+        self.assertEqual({'Content-Transfer-Encoding': 'binary'}, self.mockResponse.call_args[1]['headers'])
 
     def test_no_return_pr(self):
 
@@ -718,7 +761,7 @@ class TestGetReturnPr(AddressimoTestCase):
         self.assertEqual('PaymentRequest Not Found or Not Yet Ready', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(404, self.mockCreateJsonResponse.call_args[0][2])
 
-    def test_get_return_pr_exceptiodirectn(self):
+    def test_get_return_pr_exception(self):
 
         self.mockPluginManager.get_plugin.return_value.get_return_pr.side_effect = Exception()
 

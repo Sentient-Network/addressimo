@@ -5,13 +5,15 @@ import json
 
 from collections import defaultdict
 from datetime import datetime
-from flask import request
+from flask import request, Response
 from OpenSSL import crypto
 
 from addressimo.config import config
 from addressimo.plugin import PluginManager
 from addressimo.storeforward import requires_public_key
 from addressimo.util import requires_valid_signature, create_json_response, get_id, LogUtil
+
+from addressimo.paymentrequest.paymentrequest_pb2 import ReturnPaymentRequest
 
 log = LogUtil.setup_logging()
 
@@ -128,10 +130,22 @@ class PRR:
         for ready_request in ready_request_list:
 
             # Validate Ready Request
-            required_fields = {'id', 'receiver_pubkey', 'encrypted_payment_request', 'ephemeral_pubkey'}
+            required_fields = {'id', 'return_payment_request'}
             if not required_fields.issubset(set(ready_request.keys())):
-                log.warn("Ready Request Missing Required Fields: id and/or encrypted_payment_request")
-                failures[ready_request['id']].append('Missing Required Fields: id, receiver_pubkey, ephemeral_pubkey and/or encrypted_payment_request')
+                log.warn("Ready Request Missing Required Fields: id and/or return_payment_request")
+                if 'id' in ready_request and ready_request['id']:
+                    failures[ready_request['id']].append('Missing Required Field return_payment_request')
+                else:
+                    failures['unknown'].append('Missing ready_request id field')
+                continue
+
+            # Verify ReturnPaymentRequest is of correct type
+            rpr = ReturnPaymentRequest()
+            try:
+                rpr.ParseFromString(ready_request['return_payment_request'].decode('hex'))
+            except Exception as e:
+                log.error('Unable to Parse ReturnPaymentRequest: %s' % str(e))
+                failures[ready_request['id']].append('ReturnPaymentRequest Invalid')
                 continue
 
             # Add Return PR to Redis for later retrieval
@@ -169,13 +183,7 @@ class PRR:
             if not return_pr:
                 return create_json_response(False, 'PaymentRequest Not Found or Not Yet Ready', 404)
 
-            return_data = {
-                "encrypted_payment_request": return_pr['encrypted_payment_request'],
-                "receiver_pubkey": return_pr['receiver_pubkey'],
-                "ephemeral_pubkey": return_pr['ephemeral_pubkey']
-            }
-
-            return create_json_response(data=return_data)
+            return Response(response=return_pr['return_payment_request'].decode('hex'), status=200, mimetype='application/bitcoin-returnpaymentrequest', headers={'Content-Transfer-Encoding': 'binary'})
         except Exception as e:
             log.warn("Unable to Get Return PR %s: %s" % (id, str(e)))
             return create_json_response(False, 'PaymentRequest Not Found', 500)

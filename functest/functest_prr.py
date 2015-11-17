@@ -17,7 +17,7 @@ from addressimo.config import config
 from addressimo.crypto import HMAC_DRBG
 from addressimo.data import IdObject
 from addressimo.plugin import PluginManager
-from addressimo.paymentrequest.paymentrequest_pb2 import PaymentRequest, PaymentDetails
+from addressimo.paymentrequest.paymentrequest_pb2 import PaymentRequest, PaymentDetails, ReturnPaymentRequest
 from addressimo.util import LogUtil
 from server import app
 
@@ -194,9 +194,6 @@ class PRRFunctionalTest(LiveServerTestCase):
         pr.pki_data = ''
         pr.serialized_payment_details = pd.SerializeToString()
         pr.signature = 'testforme'
-        pr.payment_request_hash = ''
-
-        pr.payment_request_hash = hashlib.sha256(pr.SerializeToString()).digest()
 
         self.serialized_pr = pr.SerializeToString()
 
@@ -217,13 +214,17 @@ class PRRFunctionalTest(LiveServerTestCase):
 
         self.assertEqual(self.payment_id, resp_json.get('requests')[0]['id'])
 
+        rpr = ReturnPaymentRequest()
+        rpr.encrypted_payment_request = ciphertext
+        rpr.receiver_public_key = self.receiver_sk.get_verifying_key().to_string()
+        rpr.ephemeral_public_key = ecdh_key.get_verifying_key().to_string()
+        rpr.payment_request_hash = hashlib.sha256(self.serialized_pr).digest()
+
         submit_rpr_data = {
             "ready_requests": [
                 {
                     "id": resp_json.get('requests')[0]['id'],
-                    "receiver_pubkey": self.receiver_sk.get_verifying_key().to_string().encode('hex'),
-                    "encrypted_payment_request": ciphertext.encode('hex'),
-                    "ephemeral_pubkey": ecdh_key.get_verifying_key().to_string().encode('hex')
+                    "return_payment_request": rpr.SerializeToString().encode('hex')
                 }
             ]
         }
@@ -254,29 +255,38 @@ class PRRFunctionalTest(LiveServerTestCase):
         response = requests.get(sign_url)
         self.assertIsNotNone(response)
 
-        resp_json = response.json()
-        log.info(resp_json)
-        self.assertEqual(self.receiver_sk.get_verifying_key().to_string().encode('hex'), resp_json['receiver_pubkey'])
-        self.assertEqual(ciphertext.encode('hex'), resp_json['encrypted_payment_request'])
+        self.assertIn('Content-Transfer-Encoding', response.headers)
+        self.assertEqual('binary', response.headers.get('Content-Transfer-Encoding'))
+        self.assertIn('Content-Type', response.headers)
+        self.assertEqual('application/bitcoin-returnpaymentrequest', response.headers.get('Content-Type'))
+
+        returned_pr = ReturnPaymentRequest()
+        try:
+            returned_pr.ParseFromString(response.content)
+        except Exception as e:
+            self.fail('Unable to Parse ReturnPaymentRequest')
+
+        self.assertEqual(self.receiver_sk.get_verifying_key().to_string(), returned_pr.receiver_public_key)
+        self.assertEqual(ciphertext, returned_pr.encrypted_payment_request)
 
         # Decrypt Response
 
         # Determine ECDH Shared Key
-        receiving_pubkey = VerifyingKey.from_string(resp_json.get('receiver_pubkey').decode('hex'), curve=curves.SECP256k1)
+        receiving_pubkey = VerifyingKey.from_string(returned_pr.receiver_public_key, curve=curves.SECP256k1)
         decrypt_ecdh_point = self.sender_sk.privkey.secret_multiplier * receiving_pubkey.pubkey.point
         ecdh_key = SigningKey.from_secret_exponent(decrypt_ecdh_point.x(), curve=curves.SECP256k1)
 
         # Validate ECDH-derived keypair's pubkey equals the given ephemeral pubkey
-        self.assertEqual(ecdh_key.get_verifying_key().to_string().encode('hex'), resp_json.get('ephemeral_pubkey'))
+        self.assertEqual(ecdh_key.get_verifying_key().to_string(), returned_pr.ephemeral_public_key)
 
         # Decrypt PR
-        nonce = resp_json.get('receiver_pubkey').decode('hex')
+        nonce = rpr.receiver_public_key
         drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=nonce)
         encryption_key = drbg.generate(32)
         iv = drbg.generate(16)
 
         decrypt_obj = AES.new(encryption_key, AES.MODE_CBC, iv)
-        decrypt_ciphertext = unpad(decrypt_obj.decrypt(resp_json.get('encrypted_payment_request').decode('hex')))
+        decrypt_ciphertext = unpad(decrypt_obj.decrypt(returned_pr.encrypted_payment_request))
         self.assertEqual(self.serialized_pr, decrypt_ciphertext)
 
         rpr = PaymentRequest()
@@ -288,12 +298,7 @@ class PRRFunctionalTest(LiveServerTestCase):
         self.assertEqual('testforme', rpr.signature)
 
         # Authenticate PR Hash
-        test_rpr = PaymentRequest()
-        test_rpr.ParseFromString(decrypt_ciphertext)
-        test_rpr.payment_request_hash = ''
-        compare_hash = hashlib.sha256(test_rpr.SerializeToString()).digest()
-
-        self.assertEqual(compare_hash, rpr.payment_request_hash)
+        self.assertEqual(hashlib.sha256(decrypt_ciphertext).digest(), returned_pr.payment_request_hash)
 
 if __name__ == '__main__':
     unittest.main()

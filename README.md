@@ -123,29 +123,35 @@ The process that defines this interaction is described here:
 **NOTE:** The sender is the entity wishing to send value to the receiver.
 
 1. Sender submits an address resolution request to an *Addressimo* endpoint configured for PaymentRequest Requests (PRR).
-2. Sender receives a 202 Accepted response with a Location header that will eventually point to a newly returned and encrypted PaymentRequest (RPR)
-3. Receiver polls *Addressimo* for queued requests for PaymentRequests
+2. Sender receives a 202 Accepted response with a Location header that will eventually point to a newly returned ReturnPaymentRequest (RPR)
+3. Receiver polls *Addressimo* for queued requests for ReturnPaymentRequests
 4. Receiver receives queued requests that include the sender's public key
-5. Receiver creates the PaymentRequest to be returned to the sender and then provides a hash authentication using the steps provided below
-    * Set *NEW payment_request_hash* field **(to be defined in PRR Extension BIP)** to empty string ("")
-    * Get SHA256 hash of serialized PaymentRequest
-    * Set *NEW payment_request_hash* field **(to be defined in PRR Extension BIP)** in newly generated PaymentRequest
-6. Receiver generates a secret exponent for PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman)
-7. Receiver generates encryption key and initialization vector using [HMAC_DRBG](http://csrc.nist.gov/publications/nistpubs/800-90A/SP800-90A.pdf) also referenced in [RFC6979](https://tools.ietf.org/html/rfc6979) in the following way:
-    * HMAC_DRBG Initialization Entropy is set to the secret exponent generated in Step 6
-    * HMAC_DRBG Initialization Nonce is set to receiver's public key
+5. Receiver creates the PaymentRequest to be returned to the sender
+6. Receiver generates SHA256 hash of the serialized PaymentRequest
+7. Receiver generates a secret exponent for later use in PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman). *NOTE: The secret exponent is the X component of the identified ECDH-derived point.*
+8. Receiver generates encryption key and initialization vector using [HMAC_DRBG](http://csrc.nist.gov/publications/nistpubs/800-90A/SP800-90A.pdf) also referenced in [RFC6979](https://tools.ietf.org/html/rfc6979) in the following way:
+    * HMAC_DRBG Initialization Entropy is set to the secret exponent generated in Step 7
+    * HMAC_DRBG Initialization Nonce is set to receiver's public key (*received in Step 4*)
     * Encryption Key = HMAC_DRBG.GENERATE(32) - 256 bits
     * IV = HMAC_DRBG.GENERATE(16) - 128 bits
-8. Receiver encrypts the PaymentRequest using AES-256-CBC using the generated Encryption Key and IV.
-9. Receiver submits the encrypted PaymentRequest to *Addressimo*
-    * Includes public key of the ECDH generated **ephemeral_pubkey**
-    * **NOTE:** The ephemeral_pubkey is the public key belonging to an EC (SECP256K1) keypair where the exponent of the private key is the secret exponent derived in Step 6.
-10. Sender polls *Addressimo* URL returned in Step 2 for PaymentRequest retrieval
-11. Sender receives PaymentRequest
-12. Sender determines ECDH ephemeral key using the flow described in Step 6
-13. Sender validates the retrieved ephemeral_public_key against its own ECDH-determined keypair's public key
-14. Sender decrypts using AES-256-CBC and the parameters described in Step 7
-15. Sender validates *payment_request_hash* using the reverse of the flow described in Step 5.
+9. Receiver encrypts the PaymentRequest using AES-256-CBC using the generated Encryption Key and IV.
+10. Receiver creates a ReturnPaymentRequest **(New Message Type)** and sets all required fields
+
+    | Field | Type | Description |
+    |:---|:---|:---|
+    | encrypted_payment_request | bytes | AES-256-CBC Encrypted PaymentRequest as defined in this spec |
+    | receiver_public_key       | bytes | Receiver's EC Public Key (SECP256K1) |
+    | ephemeral_public_key      | bytes | Ephemeral EC Public Key Derived from ECDH Key Exchange where X value used as exponent for Private Key creation (SECP256K1) |
+    | payment_request_hash      | bytes | SHA256 Hash of Non-Encrypted, Serialized PaymentRequest (used for validation) |
+
+11. Receiver submits the encrypted ReturnPaymentRequest to *Addressimo*
+11. Sender polls *Addressimo* URL returned in Step 2 for ReturnPaymentRequest retrieval
+12. Sender receives and parses the *ReturnPaymentRequest* object
+13. Sender determines ECDH ephemeral key using the flow described in Step 7
+14. Sender validates the retrieved **ephemeral_public_key** against its own ECDH-determined keypair's public key
+15. Sender decrypts **encrypted_payment_request** using AES-256-CBC and the parameters described in Step 8
+16. Sender validates **payment_request_hash** by SHA256 hashing the decrypted, serialized PaymentRequest
+17. Sender de-serializes and uses the decrypted PaymentRequest
 
 An example of this flow can be seen in **functest/functest_prr.py**
 
@@ -253,7 +259,7 @@ The response type can be determined by looking at the Content-Type in the API re
         
 + Response 200 (application/bitcoin-paymentrequest)
 
-        BINARY PROTOBUF PaymentRequest
+        SERIALIZED BINARY PROTOBUF PaymentRequest
         
 + Response 400 (application/json)
 
@@ -533,8 +539,7 @@ The "id" returned in the POST call will need to be used for any further access t
                 "ready_requests": [
                     {
                         "id": "longUuid",
-                        "receiver_pubkey": "RECEIVER'S HEX ENCODED ECDSA PUBLIC KEY",
-                        "encrypted_payment_request": "HEX ENCODED ENCRYPTED PAYMENT REQUEST"
+                        "return_payment_request": "HEX ENCODED, SERIALIZED ReturnPaymentRequest"
                     }
                 ]
             }
@@ -586,14 +591,15 @@ The "id" returned in the POST call will need to be used for any further access t
 
     - id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... RPR ID
     
-+ Response 200 (application/json)
++ Response 200 (application/bitcoin-returnpaymentrequest)
 
-        {
-            "success": true,
-            "message": "",
-            "encrypted_payment_request": "HEX ENCODED ENCRYPTED PAYMENT REQUEST",
-            "receiver_pubkey": "RECEIVER'S HEX ENCODED ECDSA PUBLIC KEY"
-        }
+    + Headers
+    
+            Content-Transfer-Encoding: binary
+    
+    + Body
+        
+            BINARY, SERIALIZED PROTOBUF ReturnPaymentRequest
         
 + Response 404 (application/json)
 
@@ -625,11 +631,11 @@ The "id" returned in the POST call will need to be used for any further access t
            
    + Body
 
-            BINARY PROTOBUF PAYMENT
+            BINARY, SERIALIZED PROTOBUF PAYMENT
    
 + Response 200 (application/bitcoin-paymentack)
 
-            BINARY PROTOBUF PAYMENTACK
+            BINARY, SERIALIZED PROTOBUF PAYMENTACK
        
 + Response 400 (application/json)
 

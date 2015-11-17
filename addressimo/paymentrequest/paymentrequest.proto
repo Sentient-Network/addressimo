@@ -30,7 +30,6 @@ message PaymentRequest {
         optional bytes pki_data = 3;                      // depends on pki_type
         required bytes serialized_payment_details = 4;    // PaymentDetails
         optional bytes signature = 5;                     // pki-dependent signature
-        optional bytes payment_request_hash = 1000;       // Encrypted PaymentRequest Authentication Hash
 }
 message X509Certificates {
         repeated bytes certificate = 1;    // DER-encoded X.509 certificate chain
@@ -44,4 +43,11 @@ message Payment {
 message PaymentACK {
         required Payment payment = 1;      // Payment message that triggered this ACK
         optional string memo = 2;          // human-readable message for customer
+}
+
+message ReturnPaymentRequest {
+        required bytes encrypted_payment_request = 1;   // AES-256-CBC Encrypted PaymentRequest as defined in PRR Spec
+        required bytes receiver_public_key = 2;         // Receiver's EC Public Key
+        required bytes ephemeral_public_key = 3;        // Ephemeral Public Key Derived from ECDH Key Exchange X Point used as exponent for Private Key creation
+        required bytes payment_request_hash = 4;        // SHA256 Hash of Non-Encrypted, Serialized PaymentRequest (used for validation)
 }
