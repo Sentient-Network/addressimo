@@ -37,7 +37,7 @@ def resolve(id):
         return create_json_response(False, 'Unable to retrieve id_obj from database', 404)
 
     # Handle PRRs
-    if id_obj.prr_only:
+    if id_obj.ir_only:
         return create_json_response(False, 'Endpoint Requires a valid POST to create a PaymentRequest Request', 405, headers={'Allow': 'POST'})
 
     #################################################################################

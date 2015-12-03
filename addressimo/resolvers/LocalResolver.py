@@ -50,7 +50,7 @@ IGV2aWwsIGluIHRoZSBzdXBlcmxhdGl2ZSBkZWdyZWUgb2YgY29tcGFyaXNvbiBvbmx5Lg=="""
             'bip32_enabled': True,
             'master_public_key': 'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8',
             'bip70_enabled': True,
-            'prr_only': False,
+            'ir_only': False,
             'bip70_static_amount': 424242,
             'private_key_location': 'HSM1',
             'private_key_id': 'privKey1234',
@@ -123,26 +123,26 @@ rFhAxdbeHjwhElfusbIPLl8jNikPKYIjynm3P+4oTU8jzSqF6FiOTA==
         log.info('Delete called on LocalResolver [ID: %d]' % id_obj.id)
 
     # PaymentRequest Request (PRR) Data Handling
-    def add_prr(self, id, prr_data):
+    def add_invoicerequest(self, id, ir_data):
         return
 
-    def get_prrs(self, id):
+    def get_invoicerequests(self, id):
         return [self.local_prr]
 
-    def delete_prr(self, id, prr_id):
+    def delete_invoicerequest(self, id, ir_id):
         return
 
-    def cleanup_stale_prr_data(self):
+    def cleanup_stale_invoicerequest_data(self):
         return
 
     # Return PaymentRequest (RPR) Data Handling
-    def add_return_pr(self, return_pr):
+    def add_return_paymentrequest(self, return_paymentrequest):
         return
 
-    def get_return_pr(self, id):
+    def get_return_paymentrequest(self, id):
         return self.local_return_pr
 
-    def cleanup_stale_return_pr_data(self):
+    def cleanup_stale_return_paymentrequest_data(self):
         return
 
     # Payment Data Handling

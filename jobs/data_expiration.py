@@ -21,10 +21,10 @@ log.info('Completed Stale Payment Meta Data Cleanup')
 
 
 log.info('Starting Stale PRR Data Cleanup')
-resolver.cleanup_stale_prr_data()
+resolver.cleanup_stale_invoicerequest_data()
 log.info('Completed Stale PRR Data Cleanup')
 
 
 log.info('Starting Stale RPR Data Cleanup')
-resolver.cleanup_stale_return_pr_data()
+resolver.cleanup_stale_return_paymentrequest_data()
 log.info('Completed Stale RPR Data Cleanup')

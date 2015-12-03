@@ -328,7 +328,7 @@ class TestAddPRR(AddressimoTestCase):
 
     def test_go_right(self):
 
-        result = self.rr.add_prr(self.submit_id, self.prr_data)
+        result = self.rr.add_invoicerequest(self.submit_id, self.prr_data)
 
         self.assertIsNotNone(result)
         self.assertEqual('uuid4uuid4uuid4', result.get('id'))
@@ -345,7 +345,7 @@ class TestAddPRR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.exists.side_effect = [True, False]
 
-        result = self.rr.add_prr(self.submit_id, self.prr_data)
+        result = self.rr.add_invoicerequest(self.submit_id, self.prr_data)
 
         self.assertIsNotNone(result)
         self.assertEqual('uuid4uuid4uuid4', result.get('id'))
@@ -362,7 +362,7 @@ class TestAddPRR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.exists.side_effect = Exception()
 
-        self.assertRaises(Exception, self.rr.add_prr, self.submit_id, self.prr_data)
+        self.assertRaises(Exception, self.rr.add_invoicerequest, self.submit_id, self.prr_data)
 
         self.assertEqual(1, self.mockRedis.from_url.call_count)
         self.assertEqual(3, self.mockUuid4.call_count)
@@ -374,7 +374,7 @@ class TestAddPRR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.hset.return_value = 0
 
-        result = self.rr.add_prr(self.submit_id, self.prr_data)
+        result = self.rr.add_invoicerequest(self.submit_id, self.prr_data)
 
         self.assertIsNone(result)
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -390,7 +390,7 @@ class TestAddPRR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.hset.side_effect = Exception()
 
-        self.assertRaises(Exception, self.rr.add_prr, self.submit_id, self.prr_data)
+        self.assertRaises(Exception, self.rr.add_invoicerequest, self.submit_id, self.prr_data)
 
         self.assertEqual(1, self.mockRedis.from_url.call_count)
         self.assertEqual(3, self.mockUuid4.call_count)
@@ -422,7 +422,7 @@ class TestGetPRRs(AddressimoTestCase):
 
     def test_go_right(self):
 
-        result = self.rr.get_prrs(self.submit_id)
+        result = self.rr.get_invoicerequests(self.submit_id)
 
         self.assertIsNotNone(result)
         self.assertEqual(2, len(result))
@@ -436,7 +436,7 @@ class TestGetPRRs(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.hgetall.return_value = {}
 
-        result = self.rr.get_prrs(self.submit_id)
+        result = self.rr.get_invoicerequests(self.submit_id)
 
         self.assertIsNotNone(result)
         self.assertEqual(0, len(result))
@@ -448,7 +448,7 @@ class TestGetPRRs(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.hgetall.side_effect = Exception
 
-        self.assertRaises(Exception, self.rr.get_prrs, self.submit_id)
+        self.assertRaises(Exception, self.rr.get_invoicerequests, self.submit_id)
 
         self.assertEqual(1, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
@@ -472,7 +472,7 @@ class TestDeletePRR(AddressimoTestCase):
 
     def test_go_right(self):
 
-        result = self.rr.delete_prr(self.submit_id, self.prr_id)
+        result = self.rr.delete_invoicerequest(self.submit_id, self.prr_id)
 
         self.assertTrue(result)
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -484,7 +484,7 @@ class TestDeletePRR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.hdel.return_value = 0
 
-        result = self.rr.delete_prr(self.submit_id, self.prr_id)
+        result = self.rr.delete_invoicerequest(self.submit_id, self.prr_id)
 
         self.assertFalse(result)
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -496,7 +496,7 @@ class TestDeletePRR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.hdel.side_effect = Exception()
 
-        self.assertRaises(Exception, self.rr.delete_prr, self.submit_id, self.prr_id)
+        self.assertRaises(Exception, self.rr.delete_invoicerequest, self.submit_id, self.prr_id)
 
         self.assertEqual(1, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hdel.call_count)
@@ -531,7 +531,7 @@ class TestCleanupStalePRRData(AddressimoTestCase):
 
     def test_delete_one_key(self):
 
-        self.rr.cleanup_stale_prr_data()
+        self.rr.cleanup_stale_invoicerequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -546,7 +546,7 @@ class TestCleanupStalePRRData(AddressimoTestCase):
         # Setup test case
         self.mockRedis.from_url.return_value.keys.return_value = ['1', '2']
 
-        self.rr.cleanup_stale_prr_data()
+        self.rr.cleanup_stale_invoicerequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -563,7 +563,7 @@ class TestCleanupStalePRRData(AddressimoTestCase):
         # Setup test case
         self.mockRedis.from_url.return_value.keys.return_value = []
 
-        self.rr.cleanup_stale_prr_data()
+        self.rr.cleanup_stale_invoicerequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -577,7 +577,7 @@ class TestCleanupStalePRRData(AddressimoTestCase):
         self.mockRedisData['submit_date'] = self.now.strftime('%s')
         self.mockRedis.from_url.return_value.hgetall.return_value.values.return_value = [json.dumps(self.mockRedisData)]
 
-        self.rr.cleanup_stale_prr_data()
+        self.rr.cleanup_stale_invoicerequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -590,7 +590,7 @@ class TestCleanupStalePRRData(AddressimoTestCase):
         # Setup test case
         self.mockRedis.from_url.return_value.delete.side_effect = Exception('Delete failed')
 
-        self.rr.cleanup_stale_prr_data()
+        self.rr.cleanup_stale_invoicerequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -614,7 +614,7 @@ class TestAddReturnPR(AddressimoTestCase):
 
     def test_go_right(self):
 
-        result = self.rr.add_return_pr(self.return_pr)
+        result = self.rr.add_return_paymentrequest(self.return_pr)
 
         self.assertIsNone(result)
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -626,7 +626,7 @@ class TestAddReturnPR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.set.return_value = 0
 
-        self.assertRaises(Exception, self.rr.add_return_pr,self.return_pr)
+        self.assertRaises(Exception, self.rr.add_return_paymentrequest, self.return_pr)
 
         self.assertEqual(1, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
@@ -637,7 +637,7 @@ class TestAddReturnPR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.set.side_effect = Exception()
 
-        self.assertRaises(Exception, self.rr.add_return_pr,self.return_pr)
+        self.assertRaises(Exception, self.rr.add_return_paymentrequest, self.return_pr)
 
         self.assertEqual(1, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
@@ -661,7 +661,7 @@ class TestGetReturnPR(AddressimoTestCase):
 
     def test_go_right(self):
 
-        result = self.rr.get_return_pr(self.rpr_id)
+        result = self.rr.get_return_paymentrequest(self.rpr_id)
 
         self.assertIsNotNone(result)
         self.assertIn('id', result)
@@ -673,7 +673,7 @@ class TestGetReturnPR(AddressimoTestCase):
 
         self.mockRedis.from_url.return_value.get.side_effect = Exception()
 
-        self.assertRaises(Exception, self.rr.get_return_pr, self.rpr_id)
+        self.assertRaises(Exception, self.rr.get_return_paymentrequest, self.rpr_id)
 
         self.assertEqual(1, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
@@ -706,7 +706,7 @@ class TestCleanupStaleReturnPRData(AddressimoTestCase):
 
     def test_delete_one_key(self):
 
-        self.rr.cleanup_stale_return_pr_data()
+        self.rr.cleanup_stale_return_paymentrequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -721,7 +721,7 @@ class TestCleanupStaleReturnPRData(AddressimoTestCase):
         # Setup test case
         self.mockRedis.from_url.return_value.keys.return_value = ['1', '2']
 
-        self.rr.cleanup_stale_return_pr_data()
+        self.rr.cleanup_stale_return_paymentrequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -738,7 +738,7 @@ class TestCleanupStaleReturnPRData(AddressimoTestCase):
         # Setup test case
         self.mockRedis.from_url.return_value.keys.return_value = []
 
-        self.rr.cleanup_stale_return_pr_data()
+        self.rr.cleanup_stale_return_paymentrequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -752,7 +752,7 @@ class TestCleanupStaleReturnPRData(AddressimoTestCase):
         self.mockRedisData['submit_date'] = self.now.strftime('%s')
         self.mockRedis.from_url.return_value.get.return_value = json.dumps(self.mockRedisData)
 
-        self.rr.cleanup_stale_return_pr_data()
+        self.rr.cleanup_stale_return_paymentrequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)
@@ -765,7 +765,7 @@ class TestCleanupStaleReturnPRData(AddressimoTestCase):
         # Setup test case
         self.mockRedis.from_url.return_value.delete.side_effect = Exception('Delete failed')
 
-        self.rr.cleanup_stale_return_pr_data()
+        self.rr.cleanup_stale_return_paymentrequest_data()
 
         # Validate calls and counts
         self.assertEqual(1, self.mockRedis.from_url.call_count)

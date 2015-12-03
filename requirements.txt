@@ -1,6 +1,6 @@
 Flask==0.10.1
 Flask-Limiter==0.7.9
-Flask-Testing==0.4.2
+-e git+https://github.com/eleweek/flask-testing#egg=Flask-Testing
 Jinja2==2.7.3
 MarkupSafe==0.23
 Werkzeug==0.10.4

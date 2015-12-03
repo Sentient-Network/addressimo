@@ -45,6 +45,16 @@ message PaymentACK {
         optional string memo = 2;          // human-readable message for customer
 }
 
+// BIP-IR Extensions
+message InvoiceRequest {
+        required bytes  sender_public_key = 1;              // Sender's EC Public Key
+        optional uint64 amount = 2 [default = 0];           // amount is integer-number-of-satoshis
+        optional string pki_type = 3 [default = "none"];    // none / x509+sha256
+        optional bytes  pki_data = 4;                       // Depends on pki_type
+        optional string notification_url = 5;               // URL to notify on ReturnPaymentRequest ready
+        optional bytes  signature = 6;                      // PKI-dependent signature
+}
+
 message ReturnPaymentRequest {
         required bytes encrypted_payment_request = 1;   // AES-256-CBC Encrypted PaymentRequest as defined in PRR Spec
         required bytes receiver_public_key = 2;         // Receiver's EC Public Key

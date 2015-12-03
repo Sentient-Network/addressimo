@@ -20,7 +20,7 @@ from addressimo.config import config
 # private_key_id
 # x509_cert
 # x509_cert_source
-# prr_only
+# ir_only
 
 class IdObject(AttrDict):
 
@@ -33,7 +33,7 @@ class IdObject(AttrDict):
         self.bip32_enabled = False
         self.bip70_static_amount = None
         self.bip70_enabled = False
-        self.prr_only = False
+        self.ir_only = False
         self.wallet_address = None
         self.expires = 0
         self.memo = None

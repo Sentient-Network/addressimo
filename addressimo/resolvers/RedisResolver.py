@@ -114,32 +114,32 @@ class RedisResolver(BaseResolver):
             raise
 
     # PaymentRequest Request (PRR) Data Handling
-    def add_prr(self, id, prr_data):
+    def add_invoicerequest(self, id, ir_data):
 
         redis_client = Redis.from_url(config.redis_prr_queue)
 
-        if 'id' not in prr_data:
+        if 'id' not in ir_data:
             while True:
-                prr_data['id'] =  "%s%s%s" % (uuid4().hex, uuid4().hex, uuid4().hex)
+                ir_data['id'] = "%s%s%s" % (uuid4().hex, uuid4().hex, uuid4().hex)
                 try:
-                    if not redis_client.exists(prr_data['id']):
+                    if not redis_client.exists(ir_data['id']):
                         break
                 except:
                     log.warn("Unable to Validate New ID for PRR")
                     raise
 
         try:
-            result = redis_client.hset(id, prr_data['id'], json.dumps(prr_data, cls=CustomJSONEncoder))
+            result = redis_client.hset(id, ir_data['id'], json.dumps(ir_data, cls=CustomJSONEncoder))
             if result != 1:
                 return None
 
             log.info('Added PRR to Queue %s' % id)
-            return prr_data
+            return ir_data
         except Exception as e:
             log.info('Unable to Add PRR to Queue %s: %s' % (id, str(e)))
             raise
 
-    def get_prrs(self, id):
+    def get_invoicerequests(self, id):
 
         redis_client = Redis.from_url(config.redis_prr_queue)
 
@@ -150,18 +150,18 @@ class RedisResolver(BaseResolver):
             log.info('Unable to Get PRRs from Queue %s: %s' % (id, str(e)))
             raise
 
-    def delete_prr(self, id, prr_id):
+    def delete_invoicerequest(self, id, ir_id):
 
         redis_client = Redis.from_url(config.redis_prr_queue)
 
         try:
-            result = redis_client.hdel(id, prr_id)
+            result = redis_client.hdel(id, ir_id)
             return True if result > 0 else False
         except Exception as e:
             log.info('Unable to Delete PRR from Queue %s: %s' % (id, str(e)))
             raise
 
-    def cleanup_stale_prr_data(self):
+    def cleanup_stale_invoicerequest_data(self):
 
         redis_client = Redis.from_url(config.redis_prr_queue)
 
@@ -179,19 +179,19 @@ class RedisResolver(BaseResolver):
                 log.error('Exception Occurred Cleaning Up Stale PRR [ID: %s]: %s' % (key, str(e)))
 
     # Return PaymentRequest (RPR) Data Handling
-    def add_return_pr(self, return_pr):
+    def add_return_paymentrequest(self, return_paymentrequest):
 
         redis_client = Redis.from_url(config.redis_rpr_data)
 
         try:
-            result = redis_client.set(return_pr['id'], json.dumps(return_pr, cls=CustomJSONEncoder))
+            result = redis_client.set(return_paymentrequest['id'], json.dumps(return_paymentrequest, cls=CustomJSONEncoder))
             if result != 1:
                 raise Exception('Redis Set Command Failed')
         except Exception as e:
-            log.info('Unable to Add Return PR %s: %s' % (return_pr['id'], str(e)))
+            log.info('Unable to Add Return PR %s: %s' % (return_paymentrequest['id'], str(e)))
             raise
 
-    def get_return_pr(self, id):
+    def get_return_paymentrequest(self, id):
 
         redis_client = Redis.from_url(config.redis_rpr_data)
 
@@ -201,7 +201,7 @@ class RedisResolver(BaseResolver):
             log.info('Unable to Get Return PR %s: %s' % (id, str(e)))
             raise
 
-    def cleanup_stale_return_pr_data(self):
+    def cleanup_stale_return_paymentrequest_data(self):
 
         redis_client = Redis.from_url(config.redis_rpr_data)
 

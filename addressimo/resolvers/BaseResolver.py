@@ -26,26 +26,26 @@ class BaseResolver(BasePlugin):
         raise NotImplementedError
 
     # PaymentRequest Request (PRR) Data Handling
-    def add_prr(self, id, prr_data):
+    def add_invoicerequest(self, id, ir_data):
         raise NotImplementedError
 
-    def get_prrs(self, id):
+    def get_invoicerequests(self, id):
         raise NotImplementedError
 
-    def delete_prr(self, id, prr_id):
+    def delete_invoicerequest(self, id, ir_id):
         raise NotImplementedError
 
-    def cleanup_stale_prr_data(self):
+    def cleanup_stale_invoicerequest_data(self):
         raise NotImplementedError
 
     # Return PaymentRequest (RPR) Data Handling
-    def add_return_pr(self, return_pr):
+    def add_return_paymentrequest(self, return_paymentrequest):
         raise NotImplementedError
 
-    def get_return_pr(self, id):
+    def get_return_paymentrequest(self, id):
         raise NotImplementedError
 
-    def cleanup_stale_return_pr_data(self):
+    def cleanup_stale_return_paymentrequest_data(self):
         raise NotImplementedError
 
     # Payment Data Handling

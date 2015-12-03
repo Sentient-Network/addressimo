@@ -4,6 +4,8 @@ FORMAT: 1A
 
 *Addressimo* is an open source, digital currency address service written in Python.
 
+<img src="http://i.imgur.com/xVbvrZz.png" width="300">
+
 ### Download
 
 *Addressimo* is available for download here:
@@ -31,13 +33,13 @@ Quite simply, a wallet can receive different address types just by making an add
 
 * [BIP0021 / BIP0072 URI](#bituri-anchor)
 * [BIP0070 PaymentRequest](#pr-anchor)
-* [Encrypted PaymentRequest](#prr-anchor) 
+* [InvoiceRequests (Encrypted PaymentRequests)](#ir-anchor) 
 
 ### PaymentRequest Pathways
 
 * [Full PaymentRequest, Payment, and PaymentACK Processing Support](#fullflow-anchor)
 * [PaymentRequest Store & Forward](#sf-anchor)
-* [PaymentRequest Request](#prr-anchor) 
+* [InvoiceRequests (Encrypted PaymentRequests)](#ir-anchor) 
 
 <a name="static-anchor"/>
 A **Static Address** is a single, non-changing address. Due to the potential for privacy leaks, it is generally not considered best practice to use static addresses,
@@ -102,30 +104,63 @@ mobile wallets that would otherwise need to be online in order to create and sig
 The **Store & Forward PaymentRequests** are available in the same way as the create and sign on demand *PaymentRequests*, 
 and are retrieved in the general *Addressimo* address lookup request (described in the top of this document and documented below).
 
-<a name="prr-anchor"/>
-## PaymentRequest Requests
+<a name="ir-anchor"/>
+## InvoiceRequests (Encrypted PaymentRequests)
 
 ### Acronyms
 
-| Acronym   | Expanded                  | Description                                   |
-| --------- | ------------------------- | --------------------------------------------- |
-| PRR       | PaymentRequest Request    | A request to create a PaymentRequest          |
-| RPR       | Return PaymentRequest     | A PaymentRequest returned based on a PRR      |
+| Acronym   | Expanded                  | Description                                               |
+| --------- | ------------------------- | --------------------------------------------------------- |
+| IR        | InvoiceRequest            | A request to return a ReturnPaymentRequest                |
+| RPR       | ReturnPaymentRequest      | A PaymentRequest returned based on an InvoiceRequest      |
 
 ### Functionality
-PaymentRequest Request (PRR) and Return PaymentRequests (RPR) comprise a set of functionality that allows parties to make a request 
-for a PaymentRequest (PRR) and return at a later time to retrieve a PaymentRequest. This allows for two parties to exchange 
-an encrypted PaymentRequest without exposing the PaymentRequest details to 3rd parties or *Addressimo*. This functionality 
-is enabled when the prr_only configuration flag is enabled for an endpoint.
+InvoiceRequests (IR) and ReturnPaymentRequests (RPR) comprise a set of functionality that allows parties to submit an InvoiceRequest
+and return at a later time to retrieve a ReturnPaymentRequest. This allows for two parties to exchange 
+an encrypted PaymentRequest without exposing the PaymentRequest details to 3rd parties **or** an address service such as *Addressimo*. 
+This functionality is enabled when the ir_only configuration flag is enabled for an endpoint.
 
-The process that defines this interaction is described here:
+#### Newly Introduced Message Types
+
+##### InvoiceRequest Message
+
+| Field | Type | Description |
+|:---|:---|:---|
+| sender_public_key     | bytes     | Sender's EC Public Key |
+| amount                | uint64    | amount is integer-number-of-satoshis (default: 0) |
+| pki_type              | string    | none / x509+sha256 (default: "none") |
+| pki_data              | bytes     | Depends on pki_type |
+| notification_url      | string    | URL to notify on ReturnPaymentRequest ready |
+| signature             | bytes     | PKI-dependent signature |
+
+The InvoiceRequest message definition requires only the sender_public_key. *Addressimo* will validate the **sender_public_key** 
+matches the public key in the X-Identity header.
+
+When **pki_type** == "x509_sha256", **pki_data** must contain serialized a **X509Certificates** message which matches PaymentRequest
+specifications. Similarly, the message **signature** must be present and contain the message signature (using the X509 private key)
+where **signature** is an empty string.
+
+##### ReturnPaymentRequest Message
+
+| Field | Type | Description |
+|:---|:---|:---|
+| encrypted_payment_request | bytes | AES-256-CBC Encrypted PaymentRequest as defined in this spec |
+| receiver_public_key       | bytes | Receiver's EC Public Key (SECP256K1) |
+| ephemeral_public_key      | bytes | Ephemeral EC Public Key Derived from ECDH Key Exchange where X value used as exponent for Private Key creation (SECP256K1) |
+| payment_request_hash      | bytes | SHA256 Hash of Non-Encrypted, Serialized PaymentRequest (used for validation) |
+
+**NOTE**: Check addressimo/paymentrequest/paymentrequest.proto Protobuf definition file for complete message definition.
+
+### Process
+
+The process that defines this interaction that is supported in *Addressimo* is described here:
 
 **NOTE:** The sender is the entity wishing to send value to the receiver.
 
-1. Sender submits an address resolution request to an *Addressimo* endpoint configured for PaymentRequest Requests (PRR).
-2. Sender receives a 202 Accepted response with a Location header that will eventually point to a newly returned ReturnPaymentRequest (RPR)
-3. Receiver polls *Addressimo* for queued requests for ReturnPaymentRequests
-4. Receiver receives queued requests that include the sender's public key
+1. Sender submits an InvoiceRequest **(New Message Type)** to an *Addressimo* endpoint configured for InvoiceRequests.
+2. Sender receives a 202 Accepted response with a Location header that will eventually return a newly returned ReturnPaymentRequest (RPR)
+3. Receiver polls *Addressimo* for queued InvoiceRequests
+4. Receiver receives queued InvoiceRequests
 5. Receiver creates the PaymentRequest to be returned to the sender
 6. Receiver generates SHA256 hash of the serialized PaymentRequest
 7. Receiver generates a secret exponent for later use in PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman). *NOTE: The secret exponent is the X component of the identified ECDH-derived point.*
@@ -136,14 +171,6 @@ The process that defines this interaction is described here:
     * IV = HMAC_DRBG.GENERATE(16) - 128 bits
 9. Receiver encrypts the PaymentRequest using AES-256-CBC using the generated Encryption Key and IV.
 10. Receiver creates a ReturnPaymentRequest **(New Message Type)** and sets all required fields
-
-    | Field | Type | Description |
-    |:---|:---|:---|
-    | encrypted_payment_request | bytes | AES-256-CBC Encrypted PaymentRequest as defined in this spec |
-    | receiver_public_key       | bytes | Receiver's EC Public Key (SECP256K1) |
-    | ephemeral_public_key      | bytes | Ephemeral EC Public Key Derived from ECDH Key Exchange where X value used as exponent for Private Key creation (SECP256K1) |
-    | payment_request_hash      | bytes | SHA256 Hash of Non-Encrypted, Serialized PaymentRequest (used for validation) |
-
 11. Receiver submits the encrypted ReturnPaymentRequest to *Addressimo*
 11. Sender polls *Addressimo* URL returned in Step 2 for ReturnPaymentRequest retrieval
 12. Sender receives and parses the *ReturnPaymentRequest* object
@@ -153,7 +180,7 @@ The process that defines this interaction is described here:
 16. Sender validates **payment_request_hash** by SHA256 hashing the decrypted, serialized PaymentRequest
 17. Sender de-serializes and uses the decrypted PaymentRequest
 
-An example of this flow can be seen in **functest/functest_prr.py**
+An example of this flow can be seen in **functest/functest_ir.py**
 
 ### Systemic Improvements
 
@@ -220,7 +247,7 @@ take some time! In order for *Addressimo* to start resolving endpoints, you will
 <a name="auth-anchor"/>
 ### Endpoint Authentication and Request Validation
 
-Authentication and verification for some endpoints are based on [BitPay's](https://bitpay.com/api) signed request process.
+Authentication and verification for some endpoints is based on [BitPay's](https://bitpay.com/api) signed request process.
 If you're interested in reading through Bitpay's API documentation regarding the X-Identity and X-Signature headers, it 
 can be found [here](https://bitpay.com/api#making-requests).
 
@@ -277,7 +304,7 @@ The response type can be determined by looking at the Content-Type in the API re
         
 + Response 405 (application/json)
 
-    **NOTE:** This resolve endpoint requires that a PRR be created.
+    **NOTE:** This resolve endpoint requires that an [InvoiceRequest](#ir-anchor)  be created.
 
     + Headers
     
@@ -297,44 +324,41 @@ The response type can be determined by looking at the Content-Type in the API re
             "message": error_message
         }
         
-### PaymentRequest Request Submission [POST]
+### InvoiceRequest Submission [POST]
 
 **[REQUIRES AUTHENTICATION](#auth-anchor)**
 
-In addition to the existing authentication requirement, if an x509 certificate is used in the PRR the request must be 
+In addition to the existing authentication requirement, if an x509 certificate is used in the InvoiceRequest, the request must be 
 signed by the x509 certificate's private key. In this case, the process of signing the request would happen two times as defined here:
 
-1. Sign URL + JSON (without the signature key) with the x509 Certificate's private key
-2. Add the hex encoded signature to the JSON payload
-3. Sign URL + JSON (including the signature key) with the ECDSA Private Key (as described above)
+1. Create InvoiceRequest with the signature field set to ""
+2. Sign the InvoiceRequest using the X509 Certificate's Private Key
+3. Set the InvoiceRequest's signature field to the signature from Step 2.
+4. Sign URL + Serialized InvoiceRequest with the ECDSA Private Key (as described above)
 
-**NOTE:** The Location header returned from the POST call is used to retrieve the pending RPR.
+**NOTE:** The Location header returned from the POST call is used to retrieve the pending ReturnPaymentRequest.
 
 + Parameters
 
     - id (required, string, `f282ad27e92f4e518a0738dd99469470`) ... Address Resolution ID
 
-+ Request
++ Request (application/bitcoin-invoicerequest)
 
     + Headers
 
             X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
             X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
+            Content-Transfer-Encoding: "binary"
             
     + Body
 
-            {
-                "amount": 984732987423,
-                "notification_url": "https://this-is-currently-not-implemented.com",
-                "x509_cert": "-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----",
-                "signature": "HEX ENCODED X509 PRIVATE KEY SIGNATURE"
-            }
+            Serialized InvoiceRequest
         
 + Response 202
 
     + Headers
         
-            Location: "https://site_url/paymentrequest/longUuid"
+            Location: "https://site_url/returnpaymentrequest/longUuid"
     
 + Response 400 (application/json)
 
@@ -478,11 +502,13 @@ The "id" returned in the POST call will need to be used for any further access t
             "message": "Invalid Identifier"
         }
 
-## PaymentRequest Request [/address/{id}/prr]
+## InvoiceRequests [/address/{id}/invoicerequests]
 
 **[REQUIRES AUTHENTICATION](#auth-anchor)**
 
-### Retrieve PRRs [GET]
+### Retrieve InvoiceRequests [GET]
+
+Retrieve queued InvoiceRequests for the given endpoint.
    
 + Request (application/json)
 
@@ -500,11 +526,7 @@ The "id" returned in the POST call will need to be used for any further access t
             "requests": [
                 {
                     "id": "longUuid",
-                    "sender_pubkey": "SENDER'S HEX ENCODED ECDSA PUBLIC KEY",
-                    "amount": 423432,
-                    "notification_url": "",
-                    "x509_cert": "-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----",
-                    "signature": "HEX ENCODED X509 PRIVATE KEY SIGNATURE",
+                    "invoice_request": HEX ENCODED, SERIALIZED InvoiceRequest
                     "submit_date": 1439944603
                 }
             ]
@@ -524,7 +546,9 @@ The "id" returned in the POST call will need to be used for any further access t
             "message": "Unable to Retrieve Queued PR Requests"
         }
 
-### Submit RPRs [POST]
+### Submit ReturnPaymentRequest [POST]
+
+Submit ReturnPaymentRequest messages to be held until they are retrieved.
 
 + Request (application/json)
 
@@ -585,7 +609,11 @@ The "id" returned in the POST call will need to be used for any further access t
             "message": "error_message"
         }
 
-### PaymentRequest Retrieval [GET /paymentrequest/{id}]
+### ReturnPaymentRequest Retrieval [GET /returnpaymentrequest/{id}]
+
+Retrieve a ReturnPaymentRequest message by ID.
+
+**NOTE:** This message contains an encrypted PaymentRequest that can only decrypted by the original requestor.
 
 + Parameters
 
@@ -599,7 +627,7 @@ The "id" returned in the POST call will need to be used for any further access t
     
     + Body
         
-            BINARY, SERIALIZED PROTOBUF ReturnPaymentRequest
+            BINARY, SERIALIZED ReturnPaymentRequest
         
 + Response 404 (application/json)
 

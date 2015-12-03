@@ -5,7 +5,7 @@ import logging
 from flask import Flask, Response, request
 
 from addressimo.config import config
-from addressimo.paymentrequest.prr import PRR
+from addressimo.paymentrequest.ir import IR
 from addressimo.paymentrequest.payment import Payments
 from addressimo.plugin import PluginManager
 from addressimo.resolvers import resolve, return_used_branches
@@ -70,7 +70,7 @@ def resolve_id(id):
 @app.route('/address/<id>/resolve', methods=['POST'])
 @limiter.limit("10 per minute")
 def submit_pr_request(id):
-    return PRR.submit_prr(id)
+    return IR.submit_invoicerequest(id)
 
 @app.route('/address/<id>/branches', methods=['GET'])
 @limiter.limit("10 per minute")
@@ -97,20 +97,20 @@ def remove_sf_endpoint(id):
 def sf_getcount(id):
     return StoreForward.get_count()
 
-@app.route('/address/<id>/prr', methods=['GET'])
+@app.route('/address/<id>/invoicerequests', methods=['GET'])
 @limiter.limit("10 per minute")
-def get_prr(id):
-    return PRR.get_queued_pr_requests(id)
+def get_invoice_requests(id):
+    return IR.get_queued_invoice_requests(id)
 
-@app.route('/address/<id>/prr', methods=['POST'])
+@app.route('/address/<id>/invoicerequests', methods=['POST'])
 @limiter.limit("10 per minute")
 def submit_return_pr(id):
-    return PRR.submit_return_pr(id)
+    return IR.submit_return_paymentrequest(id)
 
-@app.route('/paymentrequest/<id>', methods=['GET'])
+@app.route('/returnpaymentrequest/<id>', methods=['GET'])
 @limiter.limit("10 per minute")
 def get_return_pr(id):
-    return PRR.get_return_pr(id)
+    return IR.get_return_paymentrequest(id)
 
 @app.route('/payment/<id>', methods=['POST'])
 @limiter.limit("10 per minute")
