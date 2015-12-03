@@ -158,9 +158,9 @@ The process that defines this interaction that is supported in *Addressimo* is d
 **NOTE:** The sender is the entity wishing to send value to the receiver.
 
 1. Sender submits an InvoiceRequest **(New Message Type)** to an *Addressimo* endpoint configured for InvoiceRequests.
-2. Sender receives a 202 Accepted response with a Location header that will eventually return a newly returned ReturnPaymentRequest (RPR)
+2. Sender receives a 202 Accepted response from *Addressimo* with a Location header that will eventually return a newly returned ReturnPaymentRequest (RPR)
 3. Receiver polls *Addressimo* for queued InvoiceRequests
-4. Receiver receives queued InvoiceRequests
+4. Receiver receives queued InvoiceRequests from *Addressimo*
 5. Receiver creates the PaymentRequest to be returned to the sender
 6. Receiver generates SHA256 hash of the serialized PaymentRequest
 7. Receiver generates a secret exponent for later use in PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman). *NOTE: The secret exponent is the X component of the identified ECDH-derived point.*
