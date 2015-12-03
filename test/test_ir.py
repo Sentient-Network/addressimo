@@ -115,7 +115,7 @@ class TestSubmitInvoiceRequest(AddressimoTestCase):
         self.mockPluginManager.get_plugin.return_value.add_invoicerequest.return_value = self.ret_prr_data
         self.mockDatetime.utcnow.return_value = datetime(2015, 6, 13, 2, 43, 0)
 
-        self.mockRequest.headers = {'X-Identity': 'test_pubkey', 'Content-Transfer-Encoding': 'binary'}
+        self.mockRequest.headers = {'x-identity': self.sender_sk.get_verifying_key().to_string().encode('hex'), 'Content-Transfer-Encoding': 'binary'}
         self.mockRequest.content_type = 'application/bitcoin-invoicerequest'
         self.mockRequest.get_data.return_value = self.invoice_request.SerializeToString()
         self.mockRequest.url = 'test_url'
