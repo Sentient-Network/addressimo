@@ -2,11 +2,13 @@ __author__ = 'frank'
 
 # System Imports
 import json
-from mock import Mock, patch
+from mock import Mock, patch, MagicMock
 from test import AddressimoTestCase
 
 from addressimo.resolvers.RedisResolver import *
 
+TEST_PUBKEY1 = 'ac79cd6b0ac5f2a6234996595cb2d91fceaa0b9d9a6495f12f1161c074587bd19ae86928bddea635c930c09ea9c7de1a6a9c468f9afd18fbaeed45d09564ded6'
+TEST_PUBKEY2 = 'ac79c8e1c63bec45fd2a90b459c5c4143528bc61a5e44a4818af76cd553c3023be7ca81ebe37abe38b9c797e7fb030cd3d40192455088b485a03a3b7ea4892b5'
 
 class TestGetPluginName(AddressimoTestCase):
     def test_get_plugin_name(self):
@@ -306,7 +308,7 @@ class TestDelete(AddressimoTestCase):
         self.assertEqual(self.mock_id_obj.id, call_args[0])
 
 
-class TestAddPRR(AddressimoTestCase):
+class TestAddIR(AddressimoTestCase):
 
     def setUp(self):
 
@@ -402,7 +404,7 @@ class TestAddPRR(AddressimoTestCase):
         self.assertEqual('{"id": "uuid4uuid4uuid4", "key": "value"}', self.mockRedis.from_url.return_value.hset.call_args[0][2])
 
 
-class TestGetPRRs(AddressimoTestCase):
+class TestGetIRs(AddressimoTestCase):
 
     def setUp(self):
 
@@ -455,7 +457,7 @@ class TestGetPRRs(AddressimoTestCase):
         self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
 
 
-class TestDeletePRR(AddressimoTestCase):
+class TestDeleteIR(AddressimoTestCase):
 
     def setUp(self):
 
@@ -502,6 +504,155 @@ class TestDeletePRR(AddressimoTestCase):
         self.assertEqual(1, self.mockRedis.from_url.return_value.hdel.call_count)
         self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hdel.call_args[0][0])
         self.assertEqual(self.prr_id, self.mockRedis.from_url.return_value.hdel.call_args[0][1])
+
+class TestSetIRNonce(AddressimoTestCase):
+
+    def setUp(self):
+
+        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
+        self.patcher2 = patch('addressimo.resolvers.RedisResolver.time')
+        self.patcher3 = patch('addressimo.resolvers.RedisResolver.RedisResolver.cleanup_oldest_nonces')
+
+        self.mockRedis = self.patcher1.start()
+        self.mockTime = self.patcher2.start()
+        self.mockCleanupOldestNonces = self.patcher3.start()
+
+        self.mockClient = MagicMock()
+        self.mockClient.dbsize.return_value = 2
+        self.mockRedis.from_url.return_value = self.mockClient
+
+        self.mockTime.time.return_value = 42.2
+
+        self.rr = RedisResolver()
+
+    def test_go_right(self):
+
+        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
+
+        retval = self.rr.set_invoicerequest_nonce(TEST_PUBKEY1, TEST_PUBKEY2, 123456)
+
+        self.assertIsNotNone(retval)
+
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(1, self.mockClient.dbsize.call_count)
+        self.assertEqual(0, self.mockCleanupOldestNonces.call_count)
+
+        self.assertEqual(1, self.mockClient.hmset.call_count)
+        self.assertEqual(test_key, self.mockClient.hmset.call_args[0][0])
+        self.assertEqual(42, self.mockClient.hmset.call_args[0][1]['updated'])
+        self.assertEqual(123456, self.mockClient.hmset.call_args[0][1]['nonce'])
+
+    def test_go_right_maxkeys_reached(self):
+
+        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
+        self.mockClient.dbsize.return_value = config.ir_nonce_db_maxkeys + 1
+
+        retval = self.rr.set_invoicerequest_nonce(TEST_PUBKEY1, TEST_PUBKEY2, 123456)
+
+        self.assertIsNotNone(retval)
+
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(1, self.mockClient.dbsize.call_count)
+        self.assertEqual(1, self.mockCleanupOldestNonces.call_count)
+
+        self.assertEqual(1, self.mockClient.hmset.call_count)
+        self.assertEqual(test_key, self.mockClient.hmset.call_args[0][0])
+        self.assertEqual(42, self.mockClient.hmset.call_args[0][1]['updated'])
+        self.assertEqual(123456, self.mockClient.hmset.call_args[0][1]['nonce'])
+
+    def test_redis_exception(self):
+
+        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
+        self.mockClient.hmset.side_effect = Exception()
+
+        self.assertRaises(Exception, self.rr.set_invoicerequest_nonce, TEST_PUBKEY1, TEST_PUBKEY2, 123456)
+
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(1, self.mockClient.dbsize.call_count)
+        self.assertEqual(0, self.mockCleanupOldestNonces.call_count)
+
+        self.assertEqual(1, self.mockClient.hmset.call_count)
+        self.assertEqual(test_key, self.mockClient.hmset.call_args[0][0])
+        self.assertEqual(42, self.mockClient.hmset.call_args[0][1]['updated'])
+        self.assertEqual(123456, self.mockClient.hmset.call_args[0][1]['nonce'])
+
+class TestGetIRNonce(AddressimoTestCase):
+
+    def setUp(self):
+
+        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
+
+        self.mockRedis = self.patcher1.start()
+
+        self.mockClient = MagicMock()
+        self.mockClient.hget.return_value = 'RETVAL'
+        self.mockRedis.from_url.return_value = self.mockClient
+
+        self.rr = RedisResolver()
+
+    def test_go_right(self):
+
+        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
+
+        retval = self.rr.get_invoicerequest_nonce(TEST_PUBKEY1, TEST_PUBKEY2)
+
+        self.assertEqual('RETVAL', retval)
+
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+
+        self.assertEqual(1, self.mockClient.hget.call_count)
+        self.assertEqual(test_key, self.mockClient.hget.call_args[0][0])
+        self.assertEqual('nonce', self.mockClient.hget.call_args[0][1])
+
+    def test_exception(self):
+
+        self.mockClient.hget.side_effect = Exception()
+        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
+
+        self.assertRaises(Exception, self.rr.get_invoicerequest_nonce, TEST_PUBKEY1, TEST_PUBKEY2)
+
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+
+        self.assertEqual(1, self.mockClient.hget.call_count)
+        self.assertEqual(test_key, self.mockClient.hget.call_args[0][0])
+        self.assertEqual('nonce', self.mockClient.hget.call_args[0][1])
+
+class TestCleanupOldestNonces(AddressimoTestCase):
+
+    def setUp(self):
+
+        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
+        self.patcher2 = patch('addressimo.resolvers.RedisResolver.datetime', wraps=datetime)
+
+        self.mockRedis = self.patcher1.start()
+        self.mockDatetime = self.patcher2.start()
+
+        self.mockClient = MagicMock()
+        self.mockClient.scan_iter.return_value = ['key1', 'key2']
+        self.mockClient.hget.side_effect = [10, 20]
+        self.mockRedis.from_url.return_value = self.mockClient
+
+        self.rr = RedisResolver()
+
+    def test_go_right(self):
+
+        self.rr.cleanup_oldest_nonces()
+
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(2, self.mockDatetime.fromtimestamp.call_count)
+        self.assertEqual(1, self.mockClient.delete.call_count)
+        self.assertEqual(['key1', 'key2'], self.mockClient.delete.call_args[0][0])
+
+    def test_exception(self):
+
+        self.mockClient.delete.side_effect = Exception()
+
+        self.rr.cleanup_oldest_nonces()
+
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(2, self.mockDatetime.fromtimestamp.call_count)
+        self.assertEqual(1, self.mockClient.delete.call_count)
+        self.assertEqual(['key1', 'key2'], self.mockClient.delete.call_args[0][0])
 
 
 class TestCleanupStalePRRData(AddressimoTestCase):

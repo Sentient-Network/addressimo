@@ -3,6 +3,7 @@ __author__ = 'Matt David'
 import copy
 import json
 import ssl
+import time
 
 from collections import defaultdict
 from datetime import datetime
@@ -61,7 +62,18 @@ class IR:
             log.warn("InvoiceRequest Public Key Does Not Match X-Identity Public Key")
             return create_json_response(False, 'InvoiceRequest Public Key Does Not Match X-Identity Public Key', 400)
 
-        # Setup internally stored PRR Data
+        # Validate Nonce
+        if not invoice_request.nonce or invoice_request.nonce < (int(time.time() * 1000000) - config.ir_nonce_allowable * 1000000):
+            log.warn("InvoiceRequest Nonce Missing or Before %d Seconds Ago" % config.ir_nonce_allowable)
+            return create_json_response(False, 'Invalid Nonce', 400, data={'utime': int(time.time() * 1000000)})
+
+        last_nonce = resolver.get_invoicerequest_nonce(invoice_request.sender_public_key.encode('hex'), id_obj.auth_public_key)
+        if last_nonce and invoice_request.nonce < last_nonce:
+            return create_json_response(False, 'Invalid Nonce', 400, data={'utime': int(time.time() * 1000000)})
+
+        resolver.set_invoicerequest_nonce(invoice_request.sender_public_key.encode('hex'), id_obj.auth_public_key, invoice_request.nonce)
+
+        # Setup internally stored IR Data
         ir_data = {
             'invoice_request': invoice_request.SerializeToString().encode('hex'),
             'submit_date': datetime.utcnow()

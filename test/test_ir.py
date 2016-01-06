@@ -94,6 +94,7 @@ class TestSubmitInvoiceRequest(AddressimoTestCase):
 
         self.invoice_request = InvoiceRequest()
         self.invoice_request.sender_public_key = self.sender_sk.get_verifying_key().to_string()
+        self.invoice_request.nonce = int(time.time() * 1000000)
         self.invoice_request.amount = 75
         self.invoice_request.pki_type = 'x509+sha256'
 
@@ -111,8 +112,16 @@ class TestSubmitInvoiceRequest(AddressimoTestCase):
 
         self.mock_id_obj = Mock()
         self.mock_id_obj.ir_only = True
+        self.mock_id_obj.auth_public_key = 'receiverAuthPubKey'
+
+        self.mockGetIRNonce = MagicMock()
+        self.mockSetIRNonce = MagicMock()
+        self.mockGetIRNonce.return_value = int(time.time() * 1000000) - 1000000
+
         self.mockPluginManager.get_plugin.return_value.get_id_obj.return_value = self.mock_id_obj
         self.mockPluginManager.get_plugin.return_value.add_invoicerequest.return_value = self.ret_prr_data
+        self.mockPluginManager.get_plugin.return_value.get_invoicerequest_nonce = self.mockGetIRNonce
+        self.mockPluginManager.get_plugin.return_value.set_invoicerequest_nonce = self.mockSetIRNonce
         self.mockDatetime.utcnow.return_value = datetime(2015, 6, 13, 2, 43, 0)
 
         self.mockRequest.headers = {'x-identity': self.sender_sk.get_verifying_key().to_string().encode('hex'), 'Content-Transfer-Encoding': 'binary'}
@@ -144,6 +153,15 @@ class TestSubmitInvoiceRequest(AddressimoTestCase):
         self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
         self.assertEqual(2, self.mockRequest.get_data.call_count)
         self.assertEqual(1, self.mockDatetime.utcnow.call_count)
+
+        # Validate Nonce Checking
+        self.assertEqual(1, self.mockGetIRNonce.call_count)
+        self.assertEqual(self.sender_sk.get_verifying_key().to_string().encode('hex'), self.mockGetIRNonce.call_args[0][0])
+        self.assertEqual('receiverAuthPubKey', self.mockGetIRNonce.call_args[0][1])
+        self.assertEqual(1, self.mockSetIRNonce.call_count)
+        self.assertEqual(self.sender_sk.get_verifying_key().to_string().encode('hex'), self.mockSetIRNonce.call_args[0][0])
+        self.assertEqual('receiverAuthPubKey', self.mockSetIRNonce.call_args[0][1])
+        self.assertEqual(self.invoice_request.nonce, self.mockSetIRNonce.call_args[0][2])
 
         self.assertEqual(1, self.mockCrypto.load_certificate.call_count)
         self.assertEqual(self.mockCrypto.FILETYPE_PEM, self.mockCrypto.load_certificate.call_args[0][0])
@@ -292,6 +310,65 @@ class TestSubmitInvoiceRequest(AddressimoTestCase):
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
         self.assertEqual('InvoiceRequest Public Key Does Not Match X-Identity Public Key', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
+
+    def test_missing_zero_nonce(self):
+
+        self.invoice_request.nonce = 0
+        self.mockRequest.get_data.return_value = self.invoice_request.SerializeToString()
+
+        result = IR.submit_invoicerequest('test_id')
+
+        self.assertIsNotNone(result)
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_data.call_count)
+        self.assertEqual(0, self.mockDatetime.utcnow.call_count)
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
+        self.assertEqual('Invalid Nonce', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
+        self.assertIn('utime', self.mockCreateJsonResponse.call_args[1]['data'])
+
+    def test_nonce_behind_server_time(self):
+
+        self.invoice_request.nonce = 10000000
+        self.mockRequest.get_data.return_value = self.invoice_request.SerializeToString()
+
+        result = IR.submit_invoicerequest('test_id')
+
+        self.assertIsNotNone(result)
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_data.call_count)
+        self.assertEqual(0, self.mockDatetime.utcnow.call_count)
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
+        self.assertEqual('Invalid Nonce', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
+        self.assertIn('utime', self.mockCreateJsonResponse.call_args[1]['data'])
+
+    def test_nonce_behind_last_nonce(self):
+
+        self.mockGetIRNonce.return_value = int(time.time() * 1000000) + 5000000
+
+        result = IR.submit_invoicerequest('test_id')
+
+        self.assertIsNotNone(result)
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_data.call_count)
+        self.assertEqual(0, self.mockDatetime.utcnow.call_count)
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
+        self.assertEqual('Invalid Nonce', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
+        self.assertIn('utime', self.mockCreateJsonResponse.call_args[1]['data'])
 
     def test_missing_signature(self):
 
@@ -559,13 +636,11 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         rpr1 = ReturnPaymentRequest()
         rpr1.encrypted_payment_request = 'encrypted_payment_request'.encode('hex')
         rpr1.receiver_public_key = 'receiver_public_key'.encode('hex')
-        rpr1.ephemeral_public_key = 'ephemeral_public_key'.encode('hex')
         rpr1.payment_request_hash = 'payment_request_hash'.encode('hex')
 
         rpr2 = ReturnPaymentRequest()
         rpr2.encrypted_payment_request = 'encrypted_payment_request'.encode('hex')
         rpr2.receiver_public_key = 'receiver_public_key'.encode('hex')
-        rpr2.ephemeral_public_key = 'ephemeral_public_key'.encode('hex')
         rpr2.payment_request_hash = 'payment_request_hash'.encode('hex')
 
         self.mockRequest.get_json.return_value = {

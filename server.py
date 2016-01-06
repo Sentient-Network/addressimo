@@ -1,6 +1,7 @@
 __author__ = 'mdavid'
 
 import logging
+import time
 
 from flask import Flask, Response, request
 
@@ -61,6 +62,14 @@ PluginManager.register_plugins()
 @app.route('/index.html', methods=['GET', 'OPTIONS', 'HEAD', 'POST'])
 def index():
     return Response("UP", status=200, mimetype='text/html')
+
+@app.route('/time', methods=['GET'])
+@limiter.limit("60 per minute")
+def get_current_time():
+    return create_json_response(
+            message='current time in microseconds (utc)',
+            data={'utime': int(time.time() * 1000 * 1000)}
+    )
 
 @app.route('/address/<id>/resolve', methods=['GET'])
 @limiter.limit("60 per minute")

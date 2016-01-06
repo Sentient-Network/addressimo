@@ -13,7 +13,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='paymentrequest.proto',
   package='payments',
-  serialized_pb='\n\x14paymentrequest.proto\x12\x08payments\"+\n\x06Output\x12\x11\n\x06\x61mount\x18\x01 \x01(\x04:\x01\x30\x12\x0e\n\x06script\x18\x02 \x02(\x0c\"\xa3\x01\n\x0ePaymentDetails\x12\x15\n\x07network\x18\x01 \x01(\t:\x04main\x12!\n\x07outputs\x18\x02 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04time\x18\x03 \x02(\x04\x12\x0f\n\x07\x65xpires\x18\x04 \x01(\x04\x12\x0c\n\x04memo\x18\x05 \x01(\t\x12\x13\n\x0bpayment_url\x18\x06 \x01(\t\x12\x15\n\rmerchant_data\x18\x07 \x01(\x0c\"\x95\x01\n\x0ePaymentRequest\x12\"\n\x17payment_details_version\x18\x01 \x01(\r:\x01\x31\x12\x16\n\x08pki_type\x18\x02 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x03 \x01(\x0c\x12\"\n\x1aserialized_payment_details\x18\x04 \x02(\x0c\x12\x11\n\tsignature\x18\x05 \x01(\x0c\"\'\n\x10X509Certificates\x12\x13\n\x0b\x63\x65rtificate\x18\x01 \x03(\x0c\"i\n\x07Payment\x12\x15\n\rmerchant_data\x18\x01 \x01(\x0c\x12\x14\n\x0ctransactions\x18\x02 \x03(\x0c\x12#\n\trefund_to\x18\x03 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04memo\x18\x04 \x01(\t\">\n\nPaymentACK\x12\"\n\x07payment\x18\x01 \x02(\x0b\x32\x11.payments.Payment\x12\x0c\n\x04memo\x18\x02 \x01(\t\"\x95\x01\n\x0eInvoiceRequest\x12\x19\n\x11sender_public_key\x18\x01 \x02(\x0c\x12\x11\n\x06\x61mount\x18\x02 \x01(\x04:\x01\x30\x12\x16\n\x08pki_type\x18\x03 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x04 \x01(\x0c\x12\x18\n\x10notification_url\x18\x05 \x01(\t\x12\x11\n\tsignature\x18\x06 \x01(\x0c\"\x92\x01\n\x14ReturnPaymentRequest\x12!\n\x19\x65ncrypted_payment_request\x18\x01 \x02(\x0c\x12\x1b\n\x13receiver_public_key\x18\x02 \x02(\x0c\x12\x1c\n\x14\x65phemeral_public_key\x18\x03 \x02(\x0c\x12\x1c\n\x14payment_request_hash\x18\x04 \x02(\x0c\x42(\n\x1eorg.bitcoin.protocols.paymentsB\x06Protos')
+  serialized_pb='\n\x14paymentrequest.proto\x12\x08payments\"+\n\x06Output\x12\x11\n\x06\x61mount\x18\x01 \x01(\x04:\x01\x30\x12\x0e\n\x06script\x18\x02 \x02(\x0c\"\xa3\x01\n\x0ePaymentDetails\x12\x15\n\x07network\x18\x01 \x01(\t:\x04main\x12!\n\x07outputs\x18\x02 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04time\x18\x03 \x02(\x04\x12\x0f\n\x07\x65xpires\x18\x04 \x01(\x04\x12\x0c\n\x04memo\x18\x05 \x01(\t\x12\x13\n\x0bpayment_url\x18\x06 \x01(\t\x12\x15\n\rmerchant_data\x18\x07 \x01(\x0c\"\x95\x01\n\x0ePaymentRequest\x12\"\n\x17payment_details_version\x18\x01 \x01(\r:\x01\x31\x12\x16\n\x08pki_type\x18\x02 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x03 \x01(\x0c\x12\"\n\x1aserialized_payment_details\x18\x04 \x02(\x0c\x12\x11\n\tsignature\x18\x05 \x01(\x0c\"\'\n\x10X509Certificates\x12\x13\n\x0b\x63\x65rtificate\x18\x01 \x03(\x0c\"i\n\x07Payment\x12\x15\n\rmerchant_data\x18\x01 \x01(\x0c\x12\x14\n\x0ctransactions\x18\x02 \x03(\x0c\x12#\n\trefund_to\x18\x03 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04memo\x18\x04 \x01(\t\">\n\nPaymentACK\x12\"\n\x07payment\x18\x01 \x02(\x0b\x32\x11.payments.Payment\x12\x0c\n\x04memo\x18\x02 \x01(\t\"\xa4\x01\n\x0eInvoiceRequest\x12\x19\n\x11sender_public_key\x18\x01 \x02(\x0c\x12\r\n\x05nonce\x18\x02 \x02(\x04\x12\x11\n\x06\x61mount\x18\x03 \x01(\x04:\x01\x30\x12\x16\n\x08pki_type\x18\x04 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x05 \x01(\x0c\x12\x18\n\x10notification_url\x18\x06 \x01(\t\x12\x11\n\tsignature\x18\x07 \x01(\x0c\"t\n\x14ReturnPaymentRequest\x12!\n\x19\x65ncrypted_payment_request\x18\x01 \x02(\x0c\x12\x1b\n\x13receiver_public_key\x18\x02 \x02(\x0c\x12\x1c\n\x14payment_request_hash\x18\x03 \x02(\x0c\x42(\n\x1eorg.bitcoin.protocols.paymentsB\x06Protos')
 
 
 
@@ -306,36 +306,43 @@ _INVOICEREQUEST = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='amount', full_name='payments.InvoiceRequest.amount', index=1,
-      number=2, type=4, cpp_type=4, label=1,
+      name='nonce', full_name='payments.InvoiceRequest.nonce', index=1,
+      number=2, type=4, cpp_type=4, label=2,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='amount', full_name='payments.InvoiceRequest.amount', index=2,
+      number=3, type=4, cpp_type=4, label=1,
       has_default_value=True, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='pki_type', full_name='payments.InvoiceRequest.pki_type', index=2,
-      number=3, type=9, cpp_type=9, label=1,
+      name='pki_type', full_name='payments.InvoiceRequest.pki_type', index=3,
+      number=4, type=9, cpp_type=9, label=1,
       has_default_value=True, default_value=unicode("none", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='pki_data', full_name='payments.InvoiceRequest.pki_data', index=3,
-      number=4, type=12, cpp_type=9, label=1,
+      name='pki_data', full_name='payments.InvoiceRequest.pki_data', index=4,
+      number=5, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value="",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='notification_url', full_name='payments.InvoiceRequest.notification_url', index=4,
-      number=5, type=9, cpp_type=9, label=1,
+      name='notification_url', full_name='payments.InvoiceRequest.notification_url', index=5,
+      number=6, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=unicode("", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='signature', full_name='payments.InvoiceRequest.signature', index=5,
-      number=6, type=12, cpp_type=9, label=1,
+      name='signature', full_name='payments.InvoiceRequest.signature', index=6,
+      number=7, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value="",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -350,7 +357,7 @@ _INVOICEREQUEST = _descriptor.Descriptor(
   is_extendable=False,
   extension_ranges=[],
   serialized_start=610,
-  serialized_end=759,
+  serialized_end=774,
 )
 
 
@@ -376,15 +383,8 @@ _RETURNPAYMENTREQUEST = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='ephemeral_public_key', full_name='payments.ReturnPaymentRequest.ephemeral_public_key', index=2,
+      name='payment_request_hash', full_name='payments.ReturnPaymentRequest.payment_request_hash', index=2,
       number=3, type=12, cpp_type=9, label=2,
-      has_default_value=False, default_value="",
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='payment_request_hash', full_name='payments.ReturnPaymentRequest.payment_request_hash', index=3,
-      number=4, type=12, cpp_type=9, label=2,
       has_default_value=False, default_value="",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -398,8 +398,8 @@ _RETURNPAYMENTREQUEST = _descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=762,
-  serialized_end=908,
+  serialized_start=776,
+  serialized_end=892,
 )
 
 _PAYMENTDETAILS.fields_by_name['outputs'].message_type = _OUTPUT

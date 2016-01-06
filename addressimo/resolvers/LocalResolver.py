@@ -132,6 +132,12 @@ rFhAxdbeHjwhElfusbIPLl8jNikPKYIjynm3P+4oTU8jzSqF6FiOTA==
     def delete_invoicerequest(self, id, ir_id):
         return
 
+    def set_invoicerequest_nonce(self, pubkey1, pubkey2, nonce):
+        return
+
+    def get_invoicerequest_nonce(self, pubkey1, pubkey2):
+        return
+
     def cleanup_stale_invoicerequest_data(self):
         return
 

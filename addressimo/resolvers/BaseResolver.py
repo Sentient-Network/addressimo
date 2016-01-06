@@ -35,6 +35,12 @@ class BaseResolver(BasePlugin):
     def delete_invoicerequest(self, id, ir_id):
         raise NotImplementedError
 
+    def set_invoicerequest_nonce(self, pubkey1, pubkey2, nonce):
+        raise NotImplementedError
+
+    def get_invoicerequest_nonce(self, pubkey1, pubkey2):
+        raise NotImplementedError
+
     def cleanup_stale_invoicerequest_data(self):
         raise NotImplementedError
 

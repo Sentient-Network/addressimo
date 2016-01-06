@@ -199,8 +199,10 @@ class PRRFunctionalTest(LiveServerTestCase):
         #########################
         # Create InvoiceRequest
         #########################
+        self.request_nonce = int(time.time() * 1000000)
         invoice_request = InvoiceRequest()
         invoice_request.sender_public_key = PRRFunctionalTest.sender_sk.get_verifying_key().to_string()
+        invoice_request.nonce = self.request_nonce
         invoice_request.amount = 75
         invoice_request.pki_type = 'x509+sha256'
 
@@ -288,8 +290,8 @@ class PRRFunctionalTest(LiveServerTestCase):
         ecdh_point = PRRFunctionalTest.receiver_sk.privkey.secret_multiplier * sending_pubkey.pubkey.point
 
         # Encrypt PR using HMAC-DRBG
-        nonce = PRRFunctionalTest.receiver_sk.get_verifying_key().to_string()
-        drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=nonce)
+        nonce = received_invoice_request.nonce
+        drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=str(nonce))
         encryption_key = drbg.generate(32)
         iv = drbg.generate(16)
         encrypt_obj = AES.new(encryption_key, AES.MODE_CBC, iv)
@@ -303,7 +305,6 @@ class PRRFunctionalTest(LiveServerTestCase):
         rpr = ReturnPaymentRequest()
         rpr.encrypted_payment_request = ciphertext
         rpr.receiver_public_key = PRRFunctionalTest.receiver_sk.get_verifying_key().to_string()
-        rpr.ephemeral_public_key = ecdh_key.get_verifying_key().to_string()
         rpr.payment_request_hash = hashlib.sha256(self.serialized_pr).digest()
 
         submit_rpr_data = {
@@ -369,13 +370,9 @@ class PRRFunctionalTest(LiveServerTestCase):
         decrypt_ecdh_point = PRRFunctionalTest.sender_sk.privkey.secret_multiplier * receiving_pubkey.pubkey.point
         ecdh_key = SigningKey.from_secret_exponent(decrypt_ecdh_point.x(), curve=curves.SECP256k1)
 
-        # Validate ECDH-derived keypair's pubkey equals the given ephemeral pubkey
-        self.assertEqual(ecdh_key.get_verifying_key().to_string(), returned_pr.ephemeral_public_key)
-        log.info("ECDH Derived Public Key Matches ReturnPaymentRequest Ephemeral Public Key")
-
         # Decrypt PR
-        nonce = rpr.receiver_public_key
-        drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=nonce)
+        nonce = self.request_nonce
+        drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=str(nonce))
         encryption_key = drbg.generate(32)
         iv = drbg.generate(16)
 

@@ -18,6 +18,9 @@ config.bip70_audit_log = True
 config.bip70_payment_expiration_days = 61
 config.prr_expiration_days = 30
 config.rpr_expiration_days = 16
+config.ir_nonce_allowable = 5
+config.ir_nonce_db_maxkeys = 100000000
+config.old_nonce_cleanup_size = 1000
 
 # Presigned Payment Request
 config.presigned_pr_limit = 100
@@ -32,7 +35,8 @@ config.plugin_directories = [
 
 # Redis Setup
 config.redis_id_obj_uri = 'redis://localhost:6379/1'
-config.redis_prr_queue = 'redis://localhost:6379/2'
+config.redis_ir_queue = 'redis://localhost:6379/2'
+config.redis_ir_nonce_uri = 'redis://localhost:6379/7'
 config.redis_pr_store = 'redis://localhost:6379/3'
 config.redis_payment_store = 'redis://localhost:6379/4'
 config.redis_rpr_data = 'redis://localhost:6379/5'

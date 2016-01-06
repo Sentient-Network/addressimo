@@ -1,7 +1,9 @@
 __author__ = 'Matt David'
 
 import json
+import time
 from datetime import datetime, timedelta
+from hashlib import sha256
 from time import mktime
 from redis import Redis
 from uuid import uuid4
@@ -113,10 +115,10 @@ class RedisResolver(BaseResolver):
             log.info('Unable to Delete IdObject to Redis [ID: %s]: %s' % (id_obj.id, str(e)))
             raise
 
-    # PaymentRequest Request (PRR) Data Handling
+    # InvoiceRequest (IR) Data Handling
     def add_invoicerequest(self, id, ir_data):
 
-        redis_client = Redis.from_url(config.redis_prr_queue)
+        redis_client = Redis.from_url(config.redis_ir_queue)
 
         if 'id' not in ir_data:
             while True:
@@ -141,7 +143,7 @@ class RedisResolver(BaseResolver):
 
     def get_invoicerequests(self, id):
 
-        redis_client = Redis.from_url(config.redis_prr_queue)
+        redis_client = Redis.from_url(config.redis_ir_queue)
 
         try:
             result = redis_client.hgetall(id)
@@ -152,7 +154,7 @@ class RedisResolver(BaseResolver):
 
     def delete_invoicerequest(self, id, ir_id):
 
-        redis_client = Redis.from_url(config.redis_prr_queue)
+        redis_client = Redis.from_url(config.redis_ir_queue)
 
         try:
             result = redis_client.hdel(id, ir_id)
@@ -161,9 +163,60 @@ class RedisResolver(BaseResolver):
             log.info('Unable to Delete PRR from Queue %s: %s' % (id, str(e)))
             raise
 
+    def set_invoicerequest_nonce(self, pubkey1, pubkey2, nonce):
+
+        redis_client = Redis.from_url(config.redis_ir_nonce_uri)
+
+        nonce_key = sha256(''.join(sorted([pubkey1, pubkey2]))).hexdigest()
+
+        # Clear old nonces if the dbsize is too big
+        dbsize = redis_client.dbsize()
+        if dbsize > config.ir_nonce_db_maxkeys:
+            log.info('Calling Old Nonce Cleanup, DBSize is Greater Than Configured MaxKeys')
+            self.cleanup_oldest_nonces()
+
+        try:
+            result = redis_client.hmset(nonce_key, {'nonce': nonce, 'updated': int(time.time())})
+            return result
+        except Exception as e:
+            log.info('Unable to Set IR Nonce: %s' % str(e))
+            raise
+
+    def get_invoicerequest_nonce(self, pubkey1, pubkey2):
+
+        redis_client = Redis.from_url(config.redis_ir_nonce_uri)
+
+        nonce_key = sha256(''.join(sorted([pubkey1, pubkey2]))).hexdigest()
+
+        try:
+            result = redis_client.hget(nonce_key, 'nonce')
+            return result
+        except Exception as e:
+            log.info('Unable to Retrieve IR Nonce: %s' % str(e))
+            raise
+
+    def cleanup_oldest_nonces(self):
+
+        oldest = []
+        log.info('Scanning to Remove Old Nonces [MAX: %s]' % config.old_nonce_cleanup_size)
+
+        redis_client = Redis.from_url(config.redis_ir_nonce_uri)
+        try:
+            for hkey in redis_client.scan_iter():
+                updated = datetime.fromtimestamp(redis_client.hget(hkey, 'updated'))
+                oldest.append({'key': hkey, 'updated': updated})
+                oldest = sorted(oldest, key=lambda k: k['updated'])[:config.old_nonce_cleanup_size]
+
+            log.info('Removing %d oldest nonces' % len(oldest))
+            redis_client.delete([x.get('key') for x in oldest])
+        except Exception as e:
+            # This is not a fatal error as we will retry the cleanup later
+            log.warn("Unknown Exception Caught During Old Nonce Cleanup: %s" % str(e))
+            return
+
     def cleanup_stale_invoicerequest_data(self):
 
-        redis_client = Redis.from_url(config.redis_prr_queue)
+        redis_client = Redis.from_url(config.redis_ir_queue)
 
         prr_keys = redis_client.keys()
         log.info('Found %d PRR Keys' % len(prr_keys))

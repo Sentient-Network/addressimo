@@ -127,14 +127,19 @@ This functionality is enabled when the ir_only configuration flag is enabled for
 | Field | Type | Description |
 |:---|:---|:---|
 | sender_public_key     | bytes     | Sender's EC Public Key |
+| nonce                 | uint64    | Microseconds since epoch, always increasing |
 | amount                | uint64    | amount is integer-number-of-satoshis (default: 0) |
 | pki_type              | string    | none / x509+sha256 (default: "none") |
 | pki_data              | bytes     | Depends on pki_type |
 | notification_url      | string    | URL to notify on ReturnPaymentRequest ready |
 | signature             | bytes     | PKI-dependent signature |
 
-The InvoiceRequest message definition requires only the sender_public_key. *Addressimo* will validate the **sender_public_key** 
+The InvoiceRequest message definition requires only the sender_public_key and nonce. *Addressimo* will validate the **sender_public_key** 
 matches the public key in the X-Identity header.
+
+**Nonce** must be ever-increasing. *Addressimo* enforces that the initial **Nonce** value between 2 entities is no less than 
+X seconds less than current UTC time (where X is configurable). Also, *Addressimo* enforces the ever-increasing nature of a nonce 
+between two entities. 
 
 When **pki_type** == "x509_sha256", **pki_data** must contain serialized a **X509Certificates** message which matches PaymentRequest
 specifications. Similarly, the message **signature** must be present and contain the message signature (using the X509 private key)
@@ -146,7 +151,6 @@ where **signature** is an empty string.
 |:---|:---|:---|
 | encrypted_payment_request | bytes | AES-256-CBC Encrypted PaymentRequest as defined in this spec |
 | receiver_public_key       | bytes | Receiver's EC Public Key (SECP256K1) |
-| ephemeral_public_key      | bytes | Ephemeral EC Public Key Derived from ECDH Key Exchange where X value used as exponent for Private Key creation (SECP256K1) |
 | payment_request_hash      | bytes | SHA256 Hash of Non-Encrypted, Serialized PaymentRequest (used for validation) |
 
 **NOTE**: Check addressimo/paymentrequest/paymentrequest.proto Protobuf definition file for complete message definition.
@@ -165,8 +169,8 @@ The process that defines this interaction that is supported in *Addressimo* is d
 6. Receiver generates SHA256 hash of the serialized PaymentRequest
 7. Receiver generates a secret exponent for later use in PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman). *NOTE: The secret exponent is the X component of the identified ECDH-derived point.*
 8. Receiver generates encryption key and initialization vector using [HMAC_DRBG](http://csrc.nist.gov/publications/nistpubs/800-90A/SP800-90A.pdf) also referenced in [RFC6979](https://tools.ietf.org/html/rfc6979) in the following way:
-    * HMAC_DRBG Initialization Entropy is set to the secret exponent generated in Step 7
-    * HMAC_DRBG Initialization Nonce is set to receiver's public key (*received in Step 4*)
+    * HMAC_DRBG Initialization Entropy is set to the string value of the secret exponent generated in Step 7
+    * HMAC_DRBG Initialization Nonce is set to the string value of the InvoiceRequest's nonce (*received in Step 4*)
     * Encryption Key = HMAC_DRBG.GENERATE(32) - 256 bits
     * IV = HMAC_DRBG.GENERATE(16) - 128 bits
 9. Receiver encrypts the PaymentRequest using AES-256-CBC using the generated Encryption Key and IV.
@@ -175,10 +179,9 @@ The process that defines this interaction that is supported in *Addressimo* is d
 11. Sender polls *Addressimo* URL returned in Step 2 for ReturnPaymentRequest retrieval
 12. Sender receives and parses the *ReturnPaymentRequest* object
 13. Sender determines ECDH ephemeral key using the flow described in Step 7
-14. Sender validates the retrieved **ephemeral_public_key** against its own ECDH-determined keypair's public key
-15. Sender decrypts **encrypted_payment_request** using AES-256-CBC and the parameters described in Step 8
-16. Sender validates **payment_request_hash** by SHA256 hashing the decrypted, serialized PaymentRequest
-17. Sender de-serializes and uses the decrypted PaymentRequest
+14. Sender decrypts **encrypted_payment_request** using AES-256-CBC and the parameters described in Step 8
+15. Sender validates **payment_request_hash** by SHA256 hashing the decrypted, serialized PaymentRequest
+16. Sender de-serializes and uses the decrypted PaymentRequest
 
 An example of this flow can be seen in **functest/functest_ir.py**
 
