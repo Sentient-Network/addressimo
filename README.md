@@ -719,3 +719,14 @@ Retrieve a ReturnPaymentRequest message by ID.
            "message": "Refund Output Not Found For Submitted TX."
         }
         
+# Utility Functionality
+## Get Server Time [GET /time]
++ Request (application/json)
+
++ Response 200 (application/json)
+
+        {
+            "success": true,
+            "message": "",
+            "utime": 1452797108831686
+        }
