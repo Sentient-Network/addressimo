@@ -434,6 +434,33 @@ class TestGetIRs(AddressimoTestCase):
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
 
+    def test_go_right_with_irid(self):
+
+        self.mockRedis.from_url.return_value.hget.return_value = json.dumps({"key1":"value1"})
+
+        result = self.rr.get_invoicerequests(self.submit_id, 'ir_id')
+
+        self.assertIsNotNone(result)
+        self.assertEqual({"key1":"value1"}, result)
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(0, self.mockRedis.from_url.return_value.hgetall.call_count)
+        self.assertEqual(1, self.mockRedis.from_url.return_value.hget.call_count)
+        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hget.call_args[0][0])
+        self.assertEqual('ir_id', self.mockRedis.from_url.return_value.hget.call_args[0][1])
+
+    def test_go_right_with_irid_notfound(self):
+
+        self.mockRedis.from_url.return_value.hget.return_value = None
+
+        result = self.rr.get_invoicerequests(self.submit_id, 'ir_id')
+
+        self.assertIsNone(result)
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(0, self.mockRedis.from_url.return_value.hgetall.call_count)
+        self.assertEqual(1, self.mockRedis.from_url.return_value.hget.call_count)
+        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hget.call_args[0][0])
+        self.assertEqual('ir_id', self.mockRedis.from_url.return_value.hget.call_args[0][1])
+
     def test_go_no_values(self):
 
         self.mockRedis.from_url.return_value.hgetall.return_value = {}

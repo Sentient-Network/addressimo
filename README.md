@@ -175,15 +175,24 @@ The process that defines this interaction that is supported in *Addressimo* is d
     * IV = HMAC_DRBG.GENERATE(16) - 128 bits
 9. Receiver encrypts the PaymentRequest using AES-256-CBC using the generated Encryption Key and IV.
 10. Receiver creates a ReturnPaymentRequest **(New Message Type)** and sets all required fields
-11. Receiver submits the encrypted ReturnPaymentRequest to *Addressimo*
-11. Sender polls *Addressimo* URL returned in Step 2 for ReturnPaymentRequest retrieval
-12. Sender receives and parses the *ReturnPaymentRequest* object
-13. Sender determines ECDH ephemeral key using the flow described in Step 7
-14. Sender decrypts **encrypted_payment_request** using AES-256-CBC and the parameters described in Step 8
-15. Sender validates **payment_request_hash** by SHA256 hashing the decrypted, serialized PaymentRequest
-16. Sender de-serializes and uses the decrypted PaymentRequest
+11. Receiver submits the encrypted ReturnPaymentRequest to *Addressimo* 
+    - *Addressimo* will **POST** the ReturnPaymentRequest to the original InvoiceRequest's notification_url URL if set
+12. Sender polls *Addressimo* URL returned in Step 2 for ReturnPaymentRequest retrieval
+13. Sender receives and parses the *ReturnPaymentRequest* object
+14. Sender determines ECDH ephemeral key using the flow described in Step 7
+15. Sender decrypts **encrypted_payment_request** using AES-256-CBC and the parameters described in Step 8
+16. Sender validates **payment_request_hash** by SHA256 hashing the decrypted, serialized PaymentRequest
+17. Sender de-serializes and uses the decrypted PaymentRequest
 
 An example of this flow can be seen in **functest/functest_ir.py**
+
+#### ReturnPaymentRequest Error Communication
+
+As seen in the API documentation below, if a ReturnPaymentRequest is not possible, the Receiver can 
+respond to the ReturnPaymentRequest endpoint with an **error_code** and **error_message** for the Receiver. The 
+Receiver will then receive the **error_code** and **error_message** the next time they poll for a ReturnPaymentRequest.
+
+Addressimo **WILL NOT** submit a request to the notification_url with an error.
 
 ### Systemic Improvements
 
@@ -551,7 +560,7 @@ Retrieve queued InvoiceRequests for the given endpoint.
 
 ### Submit ReturnPaymentRequest [POST]
 
-Submit ReturnPaymentRequest messages to be held until they are retrieved.
+Submit ReturnPaymentRequest messages and/or errors to be held until they are retrieved.
 
 + Request (application/json)
 
@@ -568,6 +577,13 @@ Submit ReturnPaymentRequest messages to be held until they are retrieved.
                         "id": "longUuid",
                         "return_payment_request": "HEX ENCODED, SERIALIZED ReturnPaymentRequest"
                     }
+                ],
+                "failed_requests": [
+                    {
+                        "id": "longUuid2",
+                        "error_code": 406
+                        "error_message": "Amount not possible"
+                    }
                 ]
             }
 
@@ -577,7 +593,8 @@ Submit ReturnPaymentRequest messages to be held until they are retrieved.
         {
             "success": true,
             "message": "",
-            "accept_count": 1
+            "ready_accept_count": 1,
+            "failed_accept_count": 1
         }
         
 + Response 400 (application/json)
@@ -585,7 +602,8 @@ Submit ReturnPaymentRequest messages to be held until they are retrieved.
         {
             "success": "false",
             "message": "Submitted Return PaymentRequests contain errors, please see failures field for more information",
-            "accept_count": 0
+            "ready_accept_count": 0,
+            "failed_accept_count": 1,
             "failures": {
                 "longUuid": "Missing Required Fields"
             }
@@ -616,7 +634,10 @@ Submit ReturnPaymentRequest messages to be held until they are retrieved.
 
 Retrieve a ReturnPaymentRequest message by ID.
 
-**NOTE:** This message contains an encrypted PaymentRequest that can only decrypted by the original requestor.
+A successful 200 response contains an encrypted PaymentRequest that can only decrypted by the original requestor.
+
+**NOTE:** HTTP Status Codes 404 and 500 are retryable as denoted by the Retry-After header. Other 400 status codes are
+final as the result of the InvoiceRequest has generated an error with the Receiver.
 
 + Parameters
 
@@ -634,12 +655,31 @@ Retrieve a ReturnPaymentRequest message by ID.
         
 + Response 404 (application/json)
 
+    + Headers
+    
+            Retry-After: 120
+            
+    + Body
+
         {
             "success": false,
             "message": "PaymentRequest Not Found or Not Yet Ready"
         }
         
++ Response 406 (application/json)
+
+        {
+            "success": false,
+            "message": "Amount not possible"
+        }
+        
 + Response 500 (application/json)
+
+    + Headers
+    
+            Retry-After: 120
+            
+    + Body
 
         {
             "success": false,

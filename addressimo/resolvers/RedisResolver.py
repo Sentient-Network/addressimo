@@ -141,13 +141,17 @@ class RedisResolver(BaseResolver):
             log.info('Unable to Add PRR to Queue %s: %s' % (id, str(e)))
             raise
 
-    def get_invoicerequests(self, id):
+    def get_invoicerequests(self, id, ir_id=None):
 
         redis_client = Redis.from_url(config.redis_ir_queue)
 
         try:
-            result = redis_client.hgetall(id)
-            return [json.loads(x) for x in result.values()]
+            if ir_id:
+                result = redis_client.hget(id, ir_id)
+                return json.loads(result) if result else None
+            else:
+                result = redis_client.hgetall(id)
+                return [json.loads(x) for x in result.values()]
         except Exception as e:
             log.info('Unable to Get PRRs from Queue %s: %s' % (id, str(e)))
             raise

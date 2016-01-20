@@ -237,7 +237,7 @@ class TestSubmitInvoiceRequest(AddressimoTestCase):
 
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
-        self.assertEqual('Invalid PaymentRequest Request Endpoint', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual('Invalid InvoiceRequest Endpoint', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_incorrect_content_type(self):
@@ -626,11 +626,13 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.patcher2 = patch('addressimo.paymentrequest.ir.create_json_response')
         self.patcher3 = patch('addressimo.paymentrequest.ir.request')
         self.patcher4 = patch('addressimo.paymentrequest.ir.datetime')
+        self.patcher5 = patch('addressimo.paymentrequest.ir.requests')
 
         self.mockPluginManager = self.patcher1.start()
         self.mockCreateJsonResponse = self.patcher2.start()
         self.mockRequest = self.patcher3.start()
         self.mockDatetime = self.patcher4.start()
+        self.mockRequests = self.patcher5.start()
 
         # Setup Go Right Data
         rpr1 = ReturnPaymentRequest()
@@ -653,6 +655,19 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.mock_id_obj = Mock()
         self.mock_id_obj.ir_only = True
         self.mockDatetime.utcnow.return_value = 'utcnow'
+
+        # Setup notification URL tests
+        self.mockIR = InvoiceRequest()
+        self.mockIR.sender_public_key = 'deadbeef'.decode('hex')
+        self.mockIR.nonce = 42
+        self.mockIR.notification_url = "https://webhook.endpoint.com/rpr/d34db33f"
+
+        self.mockPluginManager.get_plugin.return_value.get_invoicerequests.return_value = {
+            'invoice_request': self.mockIR.SerializeToString().encode('hex')
+        }
+
+        self.mockRequests.post.return_value = MagicMock()
+        self.mockRequests.post.return_value.status_code = 200
 
         #################################################################
         # Mock to Pass @requires_valid_signature & @requires_public_key
@@ -698,6 +713,15 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.assertEqual('utcnow', json_data['ready_requests'][1]['submit_date'])
         self.assertEqual(json_data['ready_requests'][1], add_pr_call.call_args_list[1][0][0])
 
+        # Verify Notification URL
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.get_invoicerequests.call_count)
+        self.assertEqual(2, self.mockRequests.post.call_count)
+        self.assertEqual(self.mockIR.notification_url, self.mockRequests.post.call_args[0][0])
+        self.assertIn('Content-Type', self.mockRequests.post.call_args[1]['headers'])
+        self.assertEqual('application/bitcoin-returnpaymentrequest', self.mockRequests.post.call_args[1]['headers']['Content-Type'])
+        self.assertIn('Content-Transfer-Encoding', self.mockRequests.post.call_args[1]['headers'])
+        self.assertEqual('binary', self.mockRequests.post.call_args[1]['headers']['Content-Transfer-Encoding'])
+
         self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_count)
         self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[0][0][0])
         self.assertEqual('id1', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[0][0][1])
@@ -705,7 +729,112 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.assertEqual('id2', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[1][0][1])
 
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
-        self.assertEqual(2, self.mockCreateJsonResponse.call_args[1]['data']['accept_count'])
+        self.assertEqual(2, self.mockCreateJsonResponse.call_args[1]['data']['ready_accept_count'])
+        self.assertEqual(0, self.mockCreateJsonResponse.call_args[1]['data']['failed_accept_count'])
+
+    def test_go_right_no_notification_url(self):
+
+        self.mockIR.notification_url = ""
+
+        self.mockPluginManager.get_plugin.return_value.get_invoicerequests.return_value = {
+            'invoice_request': self.mockIR.SerializeToString().encode('hex')
+        }
+
+        IR.submit_return_paymentrequest('test_id')
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_json.call_count)
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest.call_count)
+
+        add_pr_call = self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest
+        json_data = self.mockRequest.get_json.return_value
+        self.assertEqual('utcnow', json_data['ready_requests'][0]['submit_date'])
+        self.assertEqual(json_data['ready_requests'][0], add_pr_call.call_args_list[0][0][0])
+
+        self.assertEqual('utcnow', json_data['ready_requests'][1]['submit_date'])
+        self.assertEqual(json_data['ready_requests'][1], add_pr_call.call_args_list[1][0][0])
+
+        # Verify Notification URL
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.get_invoicerequests.call_count)
+        self.assertEqual(0, self.mockRequests.post.call_count)
+
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_count)
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[0][0][0])
+        self.assertEqual('id1', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[0][0][1])
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[1][0][0])
+        self.assertEqual('id2', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[1][0][1])
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertEqual(2, self.mockCreateJsonResponse.call_args[1]['data']['ready_accept_count'])
+        self.assertEqual(0, self.mockCreateJsonResponse.call_args[1]['data']['failed_accept_count'])
+
+    def test_go_right_missing_invoice_request(self):
+
+        self.mockPluginManager.get_plugin.return_value.get_invoicerequests.return_value = None
+
+        IR.submit_return_paymentrequest('test_id')
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_json.call_count)
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest.call_count)
+
+        add_pr_call = self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest
+        json_data = self.mockRequest.get_json.return_value
+        self.assertEqual('utcnow', json_data['ready_requests'][0]['submit_date'])
+        self.assertEqual(json_data['ready_requests'][0], add_pr_call.call_args_list[0][0][0])
+
+        self.assertEqual('utcnow', json_data['ready_requests'][1]['submit_date'])
+        self.assertEqual(json_data['ready_requests'][1], add_pr_call.call_args_list[1][0][0])
+
+        # Verify Notification URL
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.get_invoicerequests.call_count)
+        self.assertEqual(0, self.mockRequests.post.call_count)
+
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_count)
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[0][0][0])
+        self.assertEqual('id1', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[0][0][1])
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[1][0][0])
+        self.assertEqual('id2', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[1][0][1])
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertEqual(2, self.mockCreateJsonResponse.call_args[1]['data']['ready_accept_count'])
+        self.assertEqual(0, self.mockCreateJsonResponse.call_args[1]['data']['failed_accept_count'])
+
+    def test_go_right_failure_only(self):
+
+        self.mockRequest.get_json.return_value = {
+            "failed_requests": [
+                {"id":"id1", "error_code": "406", "error_message": "amount too high"},
+                {"id":"id2", "error_code": 409, "error_message": "amount invalid"},
+            ]
+        }
+
+        IR.submit_return_paymentrequest('test_id')
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_json.call_count)
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest.call_count)
+
+        add_pr_call = self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest
+        json_data = self.mockRequest.get_json.return_value
+        self.assertEqual('utcnow', json_data['failed_requests'][0]['submit_date'])
+        self.assertEqual(json_data['failed_requests'][0], add_pr_call.call_args_list[0][0][0])
+
+        self.assertEqual('utcnow', json_data['failed_requests'][1]['submit_date'])
+        self.assertEqual(json_data['failed_requests'][1], add_pr_call.call_args_list[1][0][0])
+
+        self.assertEqual(2, self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_count)
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[0][0][0])
+        self.assertEqual('id1', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[0][0][1])
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[1][0][0])
+        self.assertEqual('id2', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[1][0][1])
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertEqual(0, self.mockCreateJsonResponse.call_args[1]['data']['ready_accept_count'])
+        self.assertEqual(2, self.mockCreateJsonResponse.call_args[1]['data']['failed_accept_count'])
 
     def test_missing_id_obj(self):
 
@@ -734,7 +863,7 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
 
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
-        self.assertEqual('Invalid PaymentRequest Request Endpoint', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual('Invalid InvoiceRequest Endpoint', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_request_not_json(self):
@@ -767,7 +896,7 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
 
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
-        self.assertEqual('Missing or Empty ready_requests list', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual('Missing or Empty ready_requests and failed_requests lists', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_empty_ready_requests(self):
@@ -783,7 +912,7 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
 
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
-        self.assertEqual('Missing or Empty ready_requests list', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual('Missing or Empty ready_requests and failed_requests lists', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_ready_requests_non_list(self):
@@ -800,6 +929,22 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
         self.assertEqual('Missing or Empty ready_requests list', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
+
+    def test_failed_requests_non_list(self):
+
+        self.mockRequest.get_json.return_value['failed_requests'] = 'bob'
+
+        IR.submit_return_paymentrequest('test_id')
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_json.call_count)
+        self.assertEqual(0, self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest.call_count)
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
+        self.assertEqual('Missing or Empty failed_requests list', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_missing_id_required_field(self):
@@ -828,8 +973,42 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
         self.assertEqual('Submitted Return PaymentRequests contain errors, please see failures field for more information', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
-        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['accept_count'])
+        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['ready_accept_count'])
         self.assertEqual('Missing ready_request id field', self.mockCreateJsonResponse.call_args[0][3]['failures']['unknown'][0])
+
+    def test_missing_id_required_field_failed_request(self):
+
+        self.mockRequest.get_json.return_value = {
+            "failed_requests": [
+                {"error_code": "406", "error_message": "amount too high"},
+                {"id":"id2", "error_code": 409, "error_message": "amount invalid"},
+            ]
+        }
+
+        IR.submit_return_paymentrequest('test_id')
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_json.call_count)
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest.call_count)
+
+        add_pr_call = self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest
+        json_data = self.mockRequest.get_json.return_value
+
+        self.assertNotIn('submit_data', json_data['failed_requests'][0])
+        self.assertEqual('utcnow', json_data['failed_requests'][1]['submit_date'])
+        self.assertEqual(json_data['failed_requests'][1], add_pr_call.call_args[0][0])
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_count)
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args[0][0])
+        self.assertEqual('id2', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args[0][1])
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
+        self.assertEqual('Submitted Return PaymentRequests contain errors, please see failures field for more information', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
+        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['failed_accept_count'])
+        self.assertEqual('Missing failed_request id field', self.mockCreateJsonResponse.call_args[0][3]['failures']['unknown'][0])
 
     def test_missing_rpr_required_field(self):
 
@@ -857,8 +1036,42 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
         self.assertEqual('Submitted Return PaymentRequests contain errors, please see failures field for more information', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
-        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['accept_count'])
+        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['ready_accept_count'])
         self.assertEqual('Missing Required Field return_payment_request', self.mockCreateJsonResponse.call_args[0][3]['failures']['id1'][0])
+
+    def test_missing_fail_required_field(self):
+
+        self.mockRequest.get_json.return_value = {
+            "failed_requests": [
+                {"id":"id1", "error_message": "amount too high"},
+                {"id":"id2", "error_code": 409, "error_message": "amount invalid"},
+            ]
+        }
+
+        IR.submit_return_paymentrequest('test_id')
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockRequest.get_json.call_count)
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest.call_count)
+
+        add_pr_call = self.mockPluginManager.get_plugin.return_value.add_return_paymentrequest
+        json_data = self.mockRequest.get_json.return_value
+
+        self.assertNotIn('submit_data', json_data['failed_requests'][0])
+        self.assertEqual('utcnow', json_data['failed_requests'][1]['submit_date'])
+        self.assertEqual(json_data['failed_requests'][1], add_pr_call.call_args[0][0])
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_count)
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args[0][0])
+        self.assertEqual('id2', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args[0][1])
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
+        self.assertEqual('Submitted Return PaymentRequests contain errors, please see failures field for more information', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
+        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['failed_accept_count'])
+        self.assertEqual('Missing Required Field error_code and/or error_message', self.mockCreateJsonResponse.call_args[0][3]['failures']['id1'][0])
 
 
     def test_add_return_pr_exception(self):
@@ -888,7 +1101,7 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
         self.assertEqual('Submitted Return PaymentRequests contain errors, please see failures field for more information', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
-        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['accept_count'])
+        self.assertEqual(1, self.mockCreateJsonResponse.call_args[0][3]['ready_accept_count'])
         self.assertEqual('Unable to Process Return PaymentRequest', self.mockCreateJsonResponse.call_args[0][3]['failures']['id1'][0])
 
     def test_delete_prr_exception(self):
@@ -917,7 +1130,8 @@ class TestSubmitReturnPaymentRequest(AddressimoTestCase):
         self.assertEqual('id2', self.mockPluginManager.get_plugin.return_value.delete_invoicerequest.call_args_list[1][0][1])
 
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
-        self.assertEqual(2, self.mockCreateJsonResponse.call_args[1]['data']['accept_count'])
+        self.assertEqual(2, self.mockCreateJsonResponse.call_args[1]['data']['ready_accept_count'])
+        self.assertEqual(0, self.mockCreateJsonResponse.call_args[1]['data']['failed_accept_count'])
 
 class TestGetReturnPaymentRequest(AddressimoTestCase):
 
@@ -965,6 +1179,25 @@ class TestGetReturnPaymentRequest(AddressimoTestCase):
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
         self.assertEqual('PaymentRequest Not Found or Not Yet Ready', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(404, self.mockCreateJsonResponse.call_args[0][2])
+
+    def test_error_return(self):
+
+        self.mockPluginManager.get_plugin.return_value.get_return_paymentrequest.return_value = {
+            'error_code': '406',
+            'error_message': 'Amount not possible'
+        }
+
+        IR.get_return_paymentrequest('test_id')
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.get_return_paymentrequest.call_count)
+        self.assertEqual('test_id', self.mockPluginManager.get_plugin.return_value.get_return_paymentrequest.call_args[0][0])
+
+        self.assertEqual(1, self.mockCreateJsonResponse.call_count)
+        self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
+        self.assertEqual('Amount not possible', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(406, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_get_return_pr_exception(self):
 
