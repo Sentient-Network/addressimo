@@ -661,10 +661,10 @@ final as the result of the InvoiceRequest has generated an error with the Receiv
             
     + Body
 
-        {
-            "success": false,
-            "message": "PaymentRequest Not Found or Not Yet Ready"
-        }
+            {
+                "success": false,
+                "message": "PaymentRequest Not Found or Not Yet Ready"
+            }
         
 + Response 406 (application/json)
 
@@ -681,10 +681,10 @@ final as the result of the InvoiceRequest has generated an error with the Receiv
             
     + Body
 
-        {
-            "success": false,
-            "message": "PaymentRequest Not Found"
-        }
+            {
+                "success": false,
+                "message": "PaymentRequest Not Found"
+            }
         
 ## Payment Handling [/payment]
 ### Submit Payment Message [POST /payment/{id}]
@@ -758,9 +758,9 @@ final as the result of the InvoiceRequest has generated an error with the Receiv
            "success": false,
            "message": "Refund Output Not Found For Submitted TX."
         }
-        
-# Utility Functionality
-## Get Server Time [GET /time]
+
+## Time Endpoint [/time]
+### Get Server Time [GET /time]
 + Request (application/json)
 
 + Response 200 (application/json)
