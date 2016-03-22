@@ -25,7 +25,7 @@ class BaseResolver(BasePlugin):
     def delete(self, id_obj):
         raise NotImplementedError
 
-    # PaymentRequest Request (PRR) Data Handling
+    # InvoiceRequest Data Handling
     def add_invoicerequest(self, id, ir_data):
         raise NotImplementedError
 
@@ -44,14 +44,14 @@ class BaseResolver(BasePlugin):
     def cleanup_stale_invoicerequest_data(self):
         raise NotImplementedError
 
-    # Return PaymentRequest (RPR) Data Handling
-    def add_return_paymentrequest(self, return_paymentrequest):
+    # EncryptedPaymentRequest (EPR) Data Handling
+    def add_encrypted_paymentrequest(self, encrypted_paymentrequest):
         raise NotImplementedError
 
-    def get_return_paymentrequest(self, id):
+    def get_encrypted_paymentrequest(self, id):
         raise NotImplementedError
 
-    def cleanup_stale_return_paymentrequest_data(self):
+    def cleanup_stale_encrypted_paymentrequest_data(self):
         raise NotImplementedError
 
     # Payment Data Handling
@@ -71,6 +71,19 @@ class BaseResolver(BasePlugin):
         raise NotImplementedError
 
     def get_refund_address_from_tx_hash(self, tx_hash):
+        raise NotImplementedError
+
+    # EncryptedPayment / EncryptedPaymentAck
+    def add_encrypted_payment(self, encrypted_payment):
+        raise NotImplementedError
+
+    def get_encrypted_payment(self, id):
+        raise NotImplementedError
+
+    def add_encrypted_paymentack(self, encrypted_payment_ack):
+        raise NotImplementedError
+
+    def get_encrypted_paymentack(self, id):
         raise NotImplementedError
 
     @classmethod

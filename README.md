@@ -35,11 +35,11 @@ Quite simply, a wallet can receive different address types just by making an add
 * [BIP0070 PaymentRequest](#pr-anchor)
 * [InvoiceRequests (Encrypted PaymentRequests)](#ir-anchor) 
 
-### PaymentRequest Pathways
+### Payment Protocol Pathways
 
 * [Full PaymentRequest, Payment, and PaymentACK Processing Support](#fullflow-anchor)
 * [PaymentRequest Store & Forward](#sf-anchor)
-* [InvoiceRequests (Encrypted PaymentRequests)](#ir-anchor) 
+* [BIP 75](#bip75-anchor) 
 
 <a name="static-anchor"/>
 A **Static Address** is a single, non-changing address. Due to the potential for privacy leaks, it is generally not considered best practice to use static addresses,
@@ -70,10 +70,13 @@ The **Bitcoin URI** is defined in [BIP0021](https://github.com/bitcoin/bips/blob
 
 ## Address Resolution
 *Addressimo* provides address resolution services based on the configuration of the *Addressimo* endpoint. Depending on that 
-configuration, the resolution endpoint can return:
+configuration, the resolution endpoint (GET) can return:
 
 1. [BIP0072](https://github.com/bitcoin/bips/blob/master/bip-0072.mediawiki) [Bitcoin URI](#bituri-anchor) in plaintext
 2. A PaymentRequest if the URL's bip70 query parameter is set to true
+
+With **BIP75 support**, *Addressimo* supports Store & Forward address resolution services. For BIP75-enabled address 
+resolution endpoints, *Addressimo* accepts both *InvoiceRequests* and *EncryptedInvoiceRequests*.
 
 <a name="fullflow-anchor"/>
 ## Full PaymentRequest, Payment, and PaymentACK Processing
@@ -104,100 +107,29 @@ mobile wallets that would otherwise need to be online in order to create and sig
 The **Store & Forward PaymentRequests** are available in the same way as the create and sign on demand *PaymentRequests*, 
 and are retrieved in the general *Addressimo* address lookup request (described in the top of this document and documented below).
 
-<a name="ir-anchor"/>
-## InvoiceRequests (Encrypted PaymentRequests)
-
-### Acronyms
-
-| Acronym   | Expanded                  | Description                                               |
-| --------- | ------------------------- | --------------------------------------------------------- |
-| IR        | InvoiceRequest            | A request to return a ReturnPaymentRequest                |
-| RPR       | ReturnPaymentRequest      | A PaymentRequest returned based on an InvoiceRequest      |
+<a name="bip75-anchor"/>
+## BIP0075 Support
 
 ### Functionality
-InvoiceRequests (IR) and ReturnPaymentRequests (RPR) comprise a set of functionality that allows parties to submit an InvoiceRequest
-and return at a later time to retrieve a ReturnPaymentRequest. This allows for two parties to exchange 
-an encrypted PaymentRequest without exposing the PaymentRequest details to 3rd parties **or** an address service such as *Addressimo*. 
-This functionality is enabled when the ir_only configuration flag is enabled for an endpoint.
+BIP0075 comprises a set of functionality that allows sending and receiving parties to participate in the Payment Protocol 
+while messages are kept encrypted. This allows for the two parties to exchange encrypted InvoiceRequests, PaymentRequests,
+ Payments and PaymentACKs without exposing the message details to 3rd parties **or** a *Store & Forward* service such as
+ *Addressimo*. This functionality is enabled when the ir_only configuration flag is enabled for an endpoint.
+ 
+Please see [BIP0075](https://github.com/bitcoin/bips/blob/master/bip-0075.mediawiki) for more information
+about its updates to the Payment Protocol. Addressimo fully supports BIP0075 as a **Store & Forward** service and
+allows both a fully encrypted message exchange as well as the non-encrypted InvoiceRequest submission option.
 
-#### Newly Introduced Message Types
+An example of the fuly encrypted BIP75 Payment Protocol flow can be seen in **functest/functest_ir.py**
 
-##### InvoiceRequest Message
+### BIP75 Error Communication
 
-| Field | Type | Description |
-|:---|:---|:---|
-| sender_public_key     | bytes     | Sender's EC Public Key |
-| nonce                 | uint64    | Microseconds since epoch, always increasing |
-| amount                | uint64    | amount is integer-number-of-satoshis (default: 0) |
-| pki_type              | string    | none / x509+sha256 (default: "none") |
-| pki_data              | bytes     | Depends on pki_type |
-| notification_url      | string    | URL to notify on ReturnPaymentRequest ready |
-| signature             | bytes     | PKI-dependent signature |
-
-The InvoiceRequest message definition requires only the sender_public_key and nonce. *Addressimo* will validate the **sender_public_key** 
-matches the public key in the X-Identity header.
-
-**Nonce** must be ever-increasing. *Addressimo* enforces that the initial **Nonce** value between 2 entities is no less than 
-X seconds less than current UTC time (where X is configurable). Also, *Addressimo* enforces the ever-increasing nature of a nonce 
-between two entities. 
-
-When **pki_type** == "x509_sha256", **pki_data** must contain serialized a **X509Certificates** message which matches PaymentRequest
-specifications. Similarly, the message **signature** must be present and contain the message signature (using the X509 private key)
-where **signature** is an empty string.
-
-##### ReturnPaymentRequest Message
-
-| Field | Type | Description |
-|:---|:---|:---|
-| encrypted_payment_request | bytes | AES-256-CBC Encrypted PaymentRequest as defined in this spec |
-| receiver_public_key       | bytes | Receiver's EC Public Key (SECP256K1) |
-| payment_request_hash      | bytes | SHA256 Hash of Non-Encrypted, Serialized PaymentRequest (used for validation) |
-
-**NOTE**: Check addressimo/paymentrequest/paymentrequest.proto Protobuf definition file for complete message definition.
-
-### Process
-
-The process that defines this interaction that is supported in *Addressimo* is described here:
-
-**NOTE:** The sender is the entity wishing to send value to the receiver.
-
-1. Sender submits an InvoiceRequest **(New Message Type)** to an *Addressimo* endpoint configured for InvoiceRequests.
-2. Sender receives a 202 Accepted response from *Addressimo* with a Location header that will eventually return a newly returned ReturnPaymentRequest (RPR)
-3. Receiver polls *Addressimo* for queued InvoiceRequests
-4. Receiver receives queued InvoiceRequests from *Addressimo*
-5. Receiver creates the PaymentRequest to be returned to the sender
-6. Receiver generates SHA256 hash of the serialized PaymentRequest
-7. Receiver generates a secret exponent for later use in PaymentRequest encryption using [ECDH](https://en.wikipedia.org/wiki/Elliptic_curve_Diffie–Hellman). *NOTE: The secret exponent is the X component of the identified ECDH-derived point.*
-8. Receiver generates encryption key and initialization vector using [HMAC_DRBG](http://csrc.nist.gov/publications/nistpubs/800-90A/SP800-90A.pdf) also referenced in [RFC6979](https://tools.ietf.org/html/rfc6979) in the following way:
-    * HMAC_DRBG Initialization Entropy is set to the string value of the secret exponent generated in Step 7
-    * HMAC_DRBG Initialization Nonce is set to the string value of the InvoiceRequest's nonce (*received in Step 4*)
-    * Encryption Key = HMAC_DRBG.GENERATE(32) - 256 bits
-    * IV = HMAC_DRBG.GENERATE(16) - 128 bits
-9. Receiver encrypts the PaymentRequest using AES-256-CBC using the generated Encryption Key and IV.
-10. Receiver creates a ReturnPaymentRequest **(New Message Type)** and sets all required fields
-11. Receiver submits the encrypted ReturnPaymentRequest to *Addressimo* 
-    - *Addressimo* will **POST** the ReturnPaymentRequest to the original InvoiceRequest's notification_url URL if set
-12. Sender polls *Addressimo* URL returned in Step 2 for ReturnPaymentRequest retrieval
-13. Sender receives and parses the *ReturnPaymentRequest* object
-14. Sender determines ECDH ephemeral key using the flow described in Step 7
-15. Sender decrypts **encrypted_payment_request** using AES-256-CBC and the parameters described in Step 8
-16. Sender validates **payment_request_hash** by SHA256 hashing the decrypted, serialized PaymentRequest
-17. Sender de-serializes and uses the decrypted PaymentRequest
-
-An example of this flow can be seen in **functest/functest_ir.py**
-
-#### ReturnPaymentRequest Error Communication
-
-As seen in the API documentation below, if a ReturnPaymentRequest is not possible, the Receiver can 
-respond to the ReturnPaymentRequest endpoint with an **error_code** and **error_message** for the Receiver. The 
-Receiver will then receive the **error_code** and **error_message** the next time they poll for a ReturnPaymentRequest.
+As seen in the API documentation below, if an EncryptedPaymentRequest or PaymentACK is not possible, the Receiver can 
+respond to the EncryptedPaymentRequest endpoint with an **error_code** and **error_message** for the Receiver. The 
+Receiver will then receive the **error_code** and **error_message** the next time they poll for an EncryptedPaymentRequest 
+or PaymentACK.
 
 Addressimo **WILL NOT** submit a request to the notification_url with an error.
-
-### Systemic Improvements
-
-1. **Prevent Key Leakage:** Since the receiver has to approve and create a PaymentRequest they are only giving a payment address to the sender *if* they approve the PaymentRequest.
-2. **Prevent PaymentRequests Interception:** The received creates the PaymentRequest and encrypts it such that only the sender can decrypt to PaymentRequest in order to use it.
 
 # Setup
 
@@ -250,6 +182,9 @@ are bitcoin service config and redis service config. There are various other par
 **NOTE:** Upon first run, build_address_cache.py will run through the entire blockchain to load the address cache. This **will** 
 take some time! In order for *Addressimo* to start resolving endpoints, you will need to wait until the initial load is complete to start-up the service.
 
+Addressimo can act as a pure **Store & Forward** server if config.store_and_forward_only is set to True. This will not required the 
+whole bitcoin blockchain to be processed and does not require the Address Cache to be built.
+
 ##### Start Addressimo:
     
     supervisor start addressimo    
@@ -264,7 +199,7 @@ If you're interested in reading through Bitpay's API documentation regarding the
 can be found [here](https://bitpay.com/api#making-requests).
 
 All requests require both the X-Identity and X-Signature headers to be present and valid. The X-Identity header is the hex-encoded
-ECDSA public key for the private key that was used to sign the request. The X-Signature header is the hex-encoded ECDSA signature
+ECDSA public key (DER encoded) for the private key that was used to sign the request. The X-Signature header is the hex-encoded ECDSA signature
 of the message that is computed as follows:
 
 privkey.sign( **url** + **request data content** )
@@ -348,7 +283,7 @@ signed by the x509 certificate's private key. In this case, the process of signi
 3. Set the InvoiceRequest's signature field to the signature from Step 2.
 4. Sign URL + Serialized InvoiceRequest with the ECDSA Private Key (as described above)
 
-**NOTE:** The Location header returned from the POST call is used to retrieve the pending ReturnPaymentRequest.
+**NOTE:** The Location header returned from the POST call is used to retrieve the pending EncryptedPaymentRequest.
 
 + Parameters
 
@@ -365,12 +300,24 @@ signed by the x509 certificate's private key. In this case, the process of signi
     + Body
 
             Serialized InvoiceRequest
+            
++ Request (application/bitcoin-encrypted-invoicerequest)
+
+    + Headers
+    
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
+            Content-Transfer-Encoding: "binary"
+
+    + Body
+    
+            Serialized EncryptedInvoiceRequest
         
 + Response 202
 
     + Headers
         
-            Location: "https://site_url/returnpaymentrequest/longUuid"
+            Location: "https://site_url/encryptedpaymentrequest/longUuid_payment_id"
     
 + Response 400 (application/json)
 
@@ -513,222 +460,8 @@ The "id" returned in the POST call will need to be used for any further access t
             "success": false,
             "message": "Invalid Identifier"
         }
-
-## InvoiceRequests [/address/{id}/invoicerequests]
-
-**[REQUIRES AUTHENTICATION](#auth-anchor)**
-
-### Retrieve InvoiceRequests [GET]
-
-Retrieve queued InvoiceRequests for the given endpoint.
-   
-+ Request (application/json)
-
-    + Headers
-
-            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
-            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
-
-+ Response 200 (application/json)
-
-        {
-            "success": true,
-            "message": "",
-            "count": 1,
-            "requests": [
-                {
-                    "id": "longUuid",
-                    "invoice_request": HEX ENCODED, SERIALIZED InvoiceRequest
-                    "submit_date": 1439944603
-                }
-            ]
-        }
         
-+ Response 404 (application/json)
-
-        {
-            "success": false,
-            "message": "Invalid Identifier"
-        }
-        
-+ Response 500 (application/json)
-
-        {
-            "success": false,
-            "message": "Unable to Retrieve Queued PR Requests"
-        }
-
-### Submit ReturnPaymentRequest [POST]
-
-Submit ReturnPaymentRequest messages and/or errors to be held until they are retrieved.
-
-+ Request (application/json)
-
-    + Headers
-
-            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
-            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
-            
-    + Body
-
-            {
-                "ready_requests": [
-                    {
-                        "id": "longUuid",
-                        "return_payment_request": "HEX ENCODED, SERIALIZED ReturnPaymentRequest"
-                    }
-                ],
-                "failed_requests": [
-                    {
-                        "id": "longUuid2",
-                        "error_code": 406
-                        "error_message": "Amount not possible"
-                    }
-                ]
-            }
-
-
-+ Response 200 (application/json)
-
-        {
-            "success": true,
-            "message": "",
-            "ready_accept_count": 1,
-            "failed_accept_count": 1
-        }
-        
-+ Response 400 (application/json)
-
-        {
-            "success": "false",
-            "message": "Submitted Return PaymentRequests contain errors, please see failures field for more information",
-            "ready_accept_count": 0,
-            "failed_accept_count": 1,
-            "failures": {
-                "longUuid": "Missing Required Fields"
-            }
-        }
-        
-+ Response 400 (application/json)
-
-        {
-            "success": "false",
-            "message", "Invalid Request"
-        }
-        
-+ Response 404 (application/json)
-
-        {
-            "success": "false",
-            "message", "Invalid Identifier"
-        }
-        
-+ Response 500 (application/json)
-
-        {
-            "success": false,
-            "message": "error_message"
-        }
-
-### ReturnPaymentRequest Retrieval [GET /returnpaymentrequest/{id}]
-
-Retrieve a ReturnPaymentRequest message by ID.
-
-A successful 200 response contains an encrypted PaymentRequest that can only decrypted by the original requestor.
-
-**NOTE:** HTTP Status Codes 404 and 500 are retryable as denoted by the Retry-After header. Other 400 status codes are
-final as the result of the InvoiceRequest has generated an error with the Receiver.
-
-+ Parameters
-
-    - id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... RPR ID
-    
-+ Response 200 (application/bitcoin-returnpaymentrequest)
-
-    + Headers
-    
-            Content-Transfer-Encoding: binary
-    
-    + Body
-        
-            BINARY, SERIALIZED ReturnPaymentRequest
-        
-+ Response 404 (application/json)
-
-    + Headers
-    
-            Retry-After: 120
-            
-    + Body
-
-            {
-                "success": false,
-                "message": "PaymentRequest Not Found or Not Yet Ready"
-            }
-        
-+ Response 406 (application/json)
-
-        {
-            "success": false,
-            "message": "Amount not possible"
-        }
-        
-+ Response 500 (application/json)
-
-    + Headers
-    
-            Retry-After: 120
-            
-    + Body
-
-            {
-                "success": false,
-                "message": "PaymentRequest Not Found"
-            }
-        
-## Payment Handling [/payment]
-### Submit Payment Message [POST /payment/{id}]
-
-+ Parameters
-
-   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment URL ID
-
-+ Request (application/bitcoin-payment)
-
-   + Headers
-
-            Accept: "application/bitcoin-paymentack"
-            Content-Transfer-Encoding: "binary"
-           
-   + Body
-
-            BINARY, SERIALIZED PROTOBUF PAYMENT
-   
-+ Response 200 (application/bitcoin-paymentack)
-
-            BINARY, SERIALIZED PROTOBUF PAYMENTACK
-       
-+ Response 400 (application/json)
-
-        {
-           "success": false,
-           "message": "Invalid Payment Submitted"
-        }
-       
-+ Response 404 (application/json)
-
-        {
-           "success": false,
-           "message": "Unable to Retrieve PaymentRequest associated with Payment."
-        }
-       
-+ Response 500 (application/json)
-
-        {
-           "success": false,
-           "message": "Error Retrieving PaymentRequest."
-        }        
-
+## Retrieve Refund Outputs [/payment/{id}/refund/{tx}]
 ### Retrieve Refund Outputs [GET /payment/{id}/refund/{tx}]
 
 + Parameters
@@ -770,3 +503,395 @@ final as the result of the InvoiceRequest has generated an error with the Receiv
             "message": "",
             "utime": 1452797108831686
         }
+
+## InvoiceRequests [/address/{id}/invoicerequests]
+
+**NOTE:** Some endpoints **[REQUIRE AUTHENTICATION](#auth-anchor)**
+
+### Retrieve InvoiceRequests [GET]
+
+Retrieve queued InvoiceRequests / EncryptedInvoiceRequests for the given endpoint.
+   
++ Request (application/json)
+
+    + Headers
+
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
+
++ Response 200 (application/json)
+
+        {
+            "success": true,
+            "message": "",
+            "count": 2,
+            "requests": [
+                {
+                    "id": "longUuid",
+                    "invoice_request": HEX ENCODED, SERIALIZED InvoiceRequest
+                    "submit_date": 1439944603
+                }, 
+                {
+                    "id": "longUuid2",
+                    "encrypted_invoice_request": HEX ENCODED, SERIALIZED EncryptedInvoiceRequest,
+                    "submit_date": 1439944603
+            ]
+        }
+        
++ Response 404 (application/json)
+
+        {
+            "success": false,
+            "message": "Invalid Identifier"
+        }
+        
++ Response 500 (application/json)
+
+        {
+            "success": false,
+            "message": "Unable to Retrieve Queued InvoiceRequests"
+        }
+
+### Submit EncryptedPaymentRequest [POST]
+
+Submit EncryptedPaymentRequest messages and/or errors to be held until they are retrieved.
+
++ Request (application/json)
+
+    + Headers
+
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
+            
+    + Body
+
+            {
+                "ready_requests": [
+                    {
+                        "id": "longUuid",
+                        "encrypted_payment_request": "HEX ENCODED, SERIALIZED EncryptedPaymentRequest"
+                    }
+                ],
+                "failed_requests": [
+                    {
+                        "id": "longUuid2",
+                        "error_code": 406
+                        "error_message": "Amount not possible"
+                    }
+                ]
+            }
+
+
++ Response 200 (application/json)
+
+        {
+            "success": true,
+            "message": "",
+            "ready_accept_count": 1,
+            "failed_accept_count": 1
+        }
+        
++ Response 400 (application/json)
+
+        {
+            "success": "false",
+            "message": "Submitted EncryptedPaymentRequests contain errors, please see failures field for more information",
+            "ready_accept_count": 0,
+            "failed_accept_count": 1,
+            "failures": {
+                "longUuid": "Missing Required Fields"
+            }
+        }
+        
++ Response 400 (application/json)
+
+        {
+            "success": "false",
+            "message", "Invalid Request"
+        }
+        
++ Response 404 (application/json)
+
+        {
+            "success": "false",
+            "message", "Invalid Identifier"
+        }
+        
++ Response 500 (application/json)
+
+        {
+            "success": false,
+            "message": "error_message"
+        }
+
+### EncryptedPaymentRequest Retrieval [GET /encryptedpaymentrequest/{id}]
+
+Retrieve a EncryptedPaymentRequest message by ID.
+
+A successful 200 response contains an EncryptedPaymentRequest that can only decrypted by the original requestor.
+
+**NOTE:** HTTP Status Codes 404 and 500 are retryable as denoted by the Retry-After header. Other 400 status codes are
+final as the result of the InvoiceRequest has generated an error with the Receiver.
+
++ Parameters
+
+    - id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... EPR ID
+    
++ Response 200 (application/bitcoin-encrypted-paymentrequest)
+
+    + Headers
+    
+            Content-Transfer-Encoding: binary
+    
+    + Body
+        
+            BINARY, SERIALIZED EncryptedPaymentRequest
+        
++ Response 404 (application/json)
+
+    + Headers
+    
+            Retry-After: 120
+            
+    + Body
+
+            {
+                "success": false,
+                "message": "PaymentRequest Not Found or Not Yet Ready"
+            }
+        
++ Response 406 (application/json)
+
+        {
+            "success": false,
+            "message": "Amount not possible"
+        }
+        
++ Response 500 (application/json)
+
+    + Headers
+    
+            Retry-After: 120
+            
+    + Body
+
+            {
+                "success": false,
+                "message": "PaymentRequest Not Found"
+            }
+        
+## Payment Handling [/payment]
+
+### Submit Payment Message [POST /payment/{id}]
+
+Submit either a Payment or an EncryptedPayment in response to an EncryptedPaymentRequest. 
+
+A request submitting a non-encrypted Payment message will return a PaymentACK in the go right case. A request 
+submitting an encrypted Payment message will return JSON data denoting that the message has been accepted in 
+the go right case.
+
++ Parameters
+
+   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment ID
+
++ Request (application/bitcoin-payment)
+
+   + Headers
+
+            Accept: application/bitcoin-paymentack, application/json
+            Content-Transfer-Encoding: "binary"
+           
+   + Body
+
+            BINARY, SERIALIZED PROTOBUF Payment
+            
++ Request (application/bitcoin-encrypted-payment)
+
+   + Headers
+
+            Accept: application/json
+            Content-Transfer-Encoding: "binary"
+           
+   + Body
+
+            BINARY, SERIALIZED PROTOBUF EncryptedPayment
+   
++ Response 200 (application/bitcoin-paymentack)
+
+            BINARY, SERIALIZED PROTOBUF PAYMENTACK
+       
++ Response 200 (application/json)
+
+        {
+            "success": true,
+            "message": "EncryptedPayment Accepted"
+        }
+
++ Response 400 (application/json)
+
+        {
+           "success": false,
+           "message": "Invalid Payment Submitted"
+        }
+       
++ Response 404 (application/json)
+
+        {
+           "success": false,
+           "message": "Unable to Retrieve PaymentRequest associated with Payment."
+        }
+       
++ Response 500 (application/json)
+
+        {
+           "success": false,
+           "message": "Error Retrieving PaymentRequest."
+        }        
+
+### Retrieve EncryptedPayment Message [GET /payment/{id}]
+
++ Parameters
+
+   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment ID
+
++ Request
+
+   + Headers
+
+            Accept: application/bitcoin-encrypted-paymentack
+            Content-Transfer-Encoding: "binary"
+
++ Response 200 (application/bitcoin-encrypted-payment)
+
+    + Headers
+
+            Content-Transfer-Encoding: "binary"
+
+    + Body
+    
+            BINARY, SERIALIZED PROTOBUF EncryptedPayment
+            
++ Response 404 (application/json)
+
+    + Body
+    
+            {
+                "success": false,
+                "message": "EncryptedPayment Not Found or Not Yet Ready"
+            }
+
+## PaymentACK Handling [/paymentack]
+
+### Submit EncryptedPaymentACK Message [POST /paymentack/{id}]
+
+Submit an EncryptedPaymentACK in response to an EncryptedPayment
+
++ Parameters
+
+   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment ID
+
++ Request (application/bitcoin-encrypted-paymentack)
+
+   + Headers
+
+            Accept: application/json
+            Content-Transfer-Encoding: "binary"
+           
+   + Body
+
+            BINARY, SERIALIZED PROTOBUF EncryptedPaymentACK
+            
++ Request (application/json)
+
+   + Headers
+
+            Accept: application/json
+           
+   + Body
+
+            {
+                "error_code": 400,
+                "error_message": "Payment Not Accepted by Receiver"
+            }
+            
+   
++ Response 200 (application/bitcoin-paymentack)
+
+            BINARY, SERIALIZED PROTOBUF PAYMENTACK
+       
++ Response 200 (application/json)
+
+        {
+            "success": true,
+            "message": "EncryptedPaymentAck Accepted"
+        }
+
++ Response 400 (application/json)
+
+        {
+           "success": false,
+           "message": "EncryptedPaymentAck Public Key Mismatch"
+        }
+       
++ Response 404 (application/json)
+
+        {
+           "success": false,
+           "message": "Unable to Retrieve PaymentRequest associated with Payment."
+        }
+       
++ Response 503 (application/json)
+
+        {
+           "success": false,
+           "message": "Unable to Store EncryptedPaymentAck, Please Try Again Later"
+        }        
+
+### Retrieve EncryptedPaymentAck Message [GET /paymentack/{id}]
+
++ Parameters
+
+   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment ID
+
++ Request
+
+   + Headers
+
+            Accept: application/bitcoin-encrypted-paymentack, application/json
+            Content-Transfer-Encoding: "binary"
+
++ Response 200 (application/bitcoin-encrypted-paymentack)
+
+    + Headers
+
+            Content-Transfer-Encoding: "binary"
+
+    + Body
+    
+            BINARY, SERIALIZED PROTOBUF EncryptedPaymentAck
+            
++ Response 404 (application/json)
+
+    + Headers
+    
+            Retry-After: 120
+
+    + Body
+    
+            {
+                "success": false,
+                "message": "EncryptedPaymentAck Not Found or Not Yet Ready"
+            }
+
++ Response 503 (application/json)
+
+    + Headers
+    
+            Retry-After: 120
+
+    + Body
+    
+            {
+                "success": false,
+                "message": "EncryptedPaymentAck Not Found"
+            }

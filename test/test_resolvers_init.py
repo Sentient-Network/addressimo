@@ -68,6 +68,33 @@ class TestResolve(AddressimoTestCase):
         self.assertEqual(self.mockGetUnusedBip32Addr.return_value, self.mockCreateBip72Response.call_args[0][0])
         self.assertEqual(0, self.mockCreateBip72Response.call_args[0][1])
 
+    def test_sf_only_non_presigned(self):
+
+        config.store_and_forward_only = True
+
+        resolve('id')
+
+        # Validate all calls
+        self.assertEqual(0, self.mockCacheUpToDate.call_count)
+        self.assertEqual(1, self.mockCreateJSONResponse.call_count)
+        self.assertEqual(0, self.mockResponse.call_count)
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.get_id_obj.call_count)
+        self.assertEqual(0, self.mockGetUnusedPresignedPR.call_count)
+        self.assertEqual(0, self.mockGetUnusedBip32Addr.call_count)
+        self.assertEqual(0, self.mockCreatePRResponse.call_count)
+        self.assertEqual(0, self.mockCreateBip72Response.call_count)
+
+        # Validate PluginManager call args
+        self.assertEqual(('RESOLVER', config.resolver_type), self.mockPluginManager.get_plugin.call_args[0])
+        self.assertEqual('id', self.mockPluginManager.get_plugin.return_value.get_id_obj.call_args[0][0])
+
+        # Validate Error Response
+        self.assertFalse(self.mockCreateJSONResponse.call_args[0][0])
+        self.assertEqual('Endpoint Unavaiable, This is a Store & Forward ONLY Service', self.mockCreateJSONResponse.call_args[0][1])
+        self.assertEqual(404, self.mockCreateJSONResponse.call_args[0][2])
+
+        config.store_and_forward_only = False
+
     def test_go_right_generate_payment_request(self):
 
         # Setup test case
@@ -168,6 +195,44 @@ class TestResolve(AddressimoTestCase):
         self.assertDictEqual({'Content-Transfer-Encoding': 'binary', 'Access-Control-Allow-Origin': '*'}, call_args.get('headers'))
         self.assertEqual(self.mockGetUnusedPresignedPR.return_value, call_args.get('response'))
         self.assertEqual(200, call_args.get('status'))
+
+    def test_go_right_presigned_payment_request_sf_only(self):
+
+        config.store_and_forward_only = True
+
+        # Setup test case
+        self.mock_id_obj.presigned_payment_requests = ['PR1']
+        self.mock_id_obj.bip70_enabled = True
+        self.mock_id_obj.bip32_enabled = False
+        self.mockRequest.args = {'bip70': 'true'}
+
+        resolve('id')
+
+        # Validate all calls
+        self.assertEqual(0, self.mockCacheUpToDate.call_count)
+        self.assertEqual(0, self.mockCreateJSONResponse.call_count)
+        self.assertEqual(1, self.mockResponse.call_count)
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.get_id_obj.call_count)
+        self.assertEqual(1, self.mockGetUnusedPresignedPR.call_count)
+        self.assertEqual(0, self.mockGetUnusedBip32Addr.call_count)
+        self.assertEqual(0, self.mockCreatePRResponse.call_count)
+        self.assertEqual(0, self.mockCreateWalletAddrResponse.call_count)
+
+        # Validate PluginManager call args
+        self.assertEqual(('RESOLVER', config.resolver_type), self.mockPluginManager.get_plugin.call_args[0])
+        self.assertEqual('id', self.mockPluginManager.get_plugin.return_value.get_id_obj.call_args[0][0])
+
+        # Validate get_unused_presigned_payment_request call args
+        self.assertEqual(self.mock_id_obj, self.mockGetUnusedPresignedPR.call_args[0][0])
+
+        # Validate Response
+        call_args = self.mockResponse.call_args[1]
+        self.assertEqual('application/bitcoin-paymentrequest', call_args.get('content_type'))
+        self.assertDictEqual({'Content-Transfer-Encoding': 'binary', 'Access-Control-Allow-Origin': '*'}, call_args.get('headers'))
+        self.assertEqual(self.mockGetUnusedPresignedPR.return_value, call_args.get('response'))
+        self.assertEqual(200, call_args.get('status'))
+
+        config.store_and_forward_only = False
 
     def test_presigned_payment_request_non_bip70_args_request(self):
 

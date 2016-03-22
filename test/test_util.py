@@ -337,7 +337,7 @@ class TestRequiresValidSignature(AddressimoTestCase):
         sig = sk.sign(self.mockRequest.url + self.mockRequest.data)
 
         self.mockRequest.headers = {
-            'x-identity': TEST_PUBKEY,
+            'x-identity': VerifyingKey.from_string(TEST_PUBKEY.decode('hex'), curve=curves.SECP256k1).to_der().encode('hex'),
             'x-signature': sig.encode('hex')
         }
 
@@ -354,9 +354,8 @@ class TestRequiresValidSignature(AddressimoTestCase):
         self.decorated()
 
         self.assertEqual(1, self.mockGetId.call_count)
-        self.assertEqual(1, self.mockVerifyingKey.from_string.call_count)
-        self.assertEqual(TEST_PUBKEY.decode('hex'), self.mockVerifyingKey.from_string.call_args[0][0])
-        self.assertEqual(curves.SECP256k1, self.mockVerifyingKey.from_string.call_args[1]['curve'])
+        self.assertEqual(1, self.mockVerifyingKey.from_der.call_count)
+        self.assertEqual(self.mockRequest.headers['x-identity'].decode('hex'), self.mockVerifyingKey.from_der.call_args[0][0])
         self.assertEqual(1, self.mock_func.call_count)
         self.assertEqual(0, self.mockCreateJsonResponse.call_count)
 
@@ -367,9 +366,8 @@ class TestRequiresValidSignature(AddressimoTestCase):
         self.decorated()
 
         self.assertEqual(1, self.mockGetId.call_count)
-        self.assertEqual(1, self.mockVerifyingKey.from_string.call_count)
-        self.assertEqual(TEST_PUBKEY.decode('hex'), self.mockVerifyingKey.from_string.call_args[0][0])
-        self.assertEqual(curves.SECP256k1, self.mockVerifyingKey.from_string.call_args[1]['curve'])
+        self.assertEqual(1, self.mockVerifyingKey.from_der.call_count)
+        self.assertEqual(self.mockRequest.headers['x-identity'].decode('hex'), self.mockVerifyingKey.from_der.call_args[0][0])
         self.assertEqual(1, self.mock_func.call_count)
         self.assertEqual(0, self.mockCreateJsonResponse.call_count)
 
@@ -380,7 +378,7 @@ class TestRequiresValidSignature(AddressimoTestCase):
         self.decorated()
 
         self.assertEqual(1, self.mockGetId.call_count)
-        self.assertEqual(0, self.mockVerifyingKey.from_string.call_count)
+        self.assertEqual(0, self.mockVerifyingKey.from_der.call_count)
         self.assertEqual(0, self.mock_func.call_count)
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
@@ -389,14 +387,13 @@ class TestRequiresValidSignature(AddressimoTestCase):
 
     def test_verifying_key_creation_exception(self):
 
-        self.mockVerifyingKey.from_string.side_effect = UnexpectedDER()
+        self.mockVerifyingKey.from_der.side_effect = UnexpectedDER()
 
         self.decorated()
 
         self.assertEqual(1, self.mockGetId.call_count)
-        self.assertEqual(1, self.mockVerifyingKey.from_string.call_count)
-        self.assertEqual(TEST_PUBKEY.decode('hex'), self.mockVerifyingKey.from_string.call_args[0][0])
-        self.assertEqual(curves.SECP256k1, self.mockVerifyingKey.from_string.call_args[1]['curve'])
+        self.assertEqual(1, self.mockVerifyingKey.from_der.call_count)
+        self.assertEqual(self.mockRequest.headers['x-identity'].decode('hex'), self.mockVerifyingKey.from_der.call_args[0][0])
         self.assertEqual(0, self.mock_func.call_count)
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
@@ -410,9 +407,8 @@ class TestRequiresValidSignature(AddressimoTestCase):
         self.decorated()
 
         self.assertEqual(1, self.mockGetId.call_count)
-        self.assertEqual(1, self.mockVerifyingKey.from_string.call_count)
-        self.assertEqual(TEST_PUBKEY.decode('hex'), self.mockVerifyingKey.from_string.call_args[0][0])
-        self.assertEqual(curves.SECP256k1, self.mockVerifyingKey.from_string.call_args[1]['curve'])
+        self.assertEqual(1, self.mockVerifyingKey.from_der.call_count)
+        self.assertEqual(self.mockRequest.headers['x-identity'].decode('hex'), self.mockVerifyingKey.from_der.call_args[0][0])
         self.assertEqual(0, self.mock_func.call_count)
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
@@ -421,14 +417,13 @@ class TestRequiresValidSignature(AddressimoTestCase):
 
     def test_bad_digest_error(self):
 
-        self.mockVerifyingKey.from_string.return_value.verify.side_effect = BadDigestError()
+        self.mockVerifyingKey.from_der.return_value.verify.side_effect = BadDigestError()
 
         self.decorated()
 
         self.assertEqual(1, self.mockGetId.call_count)
-        self.assertEqual(1, self.mockVerifyingKey.from_string.call_count)
-        self.assertEqual(TEST_PUBKEY.decode('hex'), self.mockVerifyingKey.from_string.call_args[0][0])
-        self.assertEqual(curves.SECP256k1, self.mockVerifyingKey.from_string.call_args[1]['curve'])
+        self.assertEqual(1, self.mockVerifyingKey.from_der.call_count)
+        self.assertEqual(self.mockRequest.headers['x-identity'].decode('hex'), self.mockVerifyingKey.from_der.call_args[0][0])
         self.assertEqual(0, self.mock_func.call_count)
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
@@ -437,14 +432,13 @@ class TestRequiresValidSignature(AddressimoTestCase):
 
     def test_bad_signature_error(self):
 
-        self.mockVerifyingKey.from_string.return_value.verify.side_effect = BadSignatureError()
+        self.mockVerifyingKey.from_der.return_value.verify.side_effect = BadSignatureError()
 
         self.decorated()
 
         self.assertEqual(1, self.mockGetId.call_count)
-        self.assertEqual(1, self.mockVerifyingKey.from_string.call_count)
-        self.assertEqual(TEST_PUBKEY.decode('hex'), self.mockVerifyingKey.from_string.call_args[0][0])
-        self.assertEqual(curves.SECP256k1, self.mockVerifyingKey.from_string.call_args[1]['curve'])
+        self.assertEqual(1, self.mockVerifyingKey.from_der.call_count)
+        self.assertEqual(self.mockRequest.headers['x-identity'].decode('hex'), self.mockVerifyingKey.from_der.call_args[0][0])
         self.assertEqual(0, self.mock_func.call_count)
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])

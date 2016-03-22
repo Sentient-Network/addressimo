@@ -2,7 +2,7 @@ __author__ = 'Matt David'
 
 from addressimo.config import config
 from addressimo.data import IdObject
-from addressimo.paymentrequest.paymentrequest_pb2 import PaymentRequest, PaymentDetails
+from addressimo.paymentprotocol.paymentrequest_pb2 import PaymentRequest, PaymentDetails
 from addressimo.plugin import PluginManager
 from addressimo.util import LogUtil, create_json_response, get_id, requires_valid_signature, PAYMENT_REQUEST_SIZE_MAX
 

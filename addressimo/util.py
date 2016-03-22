@@ -138,7 +138,7 @@ def requires_valid_signature(f):
             return create_json_response(False, 'Missing x-signature header', 400)
 
         try:
-            vk = VerifyingKey.from_string(request.headers.get('x-identity').decode('hex'), curve=curves.SECP256k1)
+            vk = VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
         except UnexpectedDER as e:
             log.info('Bad Key Format [ID: %s]: %s' % (id, str(e)))
             return create_json_response(False, 'Bad Public Key Format', 400)

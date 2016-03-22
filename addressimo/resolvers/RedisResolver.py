@@ -127,7 +127,7 @@ class RedisResolver(BaseResolver):
                     if not redis_client.exists(ir_data['id']):
                         break
                 except:
-                    log.warn("Unable to Validate New ID for PRR")
+                    log.warn("Unable to Validate New ID for InvoiceRequest")
                     raise
 
         try:
@@ -135,10 +135,10 @@ class RedisResolver(BaseResolver):
             if result != 1:
                 return None
 
-            log.info('Added PRR to Queue %s' % id)
+            log.info('Added InvoiceRequest to Queue %s' % id)
             return ir_data
         except Exception as e:
-            log.info('Unable to Add PRR to Queue %s: %s' % (id, str(e)))
+            log.info('Unable to Add InvoiceRequest to Queue %s: %s' % (id, str(e)))
             raise
 
     def get_invoicerequests(self, id, ir_id=None):
@@ -153,7 +153,7 @@ class RedisResolver(BaseResolver):
                 result = redis_client.hgetall(id)
                 return [json.loads(x) for x in result.values()]
         except Exception as e:
-            log.info('Unable to Get PRRs from Queue %s: %s' % (id, str(e)))
+            log.info('Unable to Get InvoiceRequests from Queue %s: %s' % (id, str(e)))
             raise
 
     def delete_invoicerequest(self, id, ir_id):
@@ -164,7 +164,7 @@ class RedisResolver(BaseResolver):
             result = redis_client.hdel(id, ir_id)
             return True if result > 0 else False
         except Exception as e:
-            log.info('Unable to Delete PRR from Queue %s: %s' % (id, str(e)))
+            log.info('Unable to Delete InvoiceRequest from Queue %s: %s' % (id, str(e)))
             raise
 
     def set_invoicerequest_nonce(self, pubkey1, pubkey2, nonce):
@@ -222,58 +222,58 @@ class RedisResolver(BaseResolver):
 
         redis_client = Redis.from_url(config.redis_ir_queue)
 
-        prr_keys = redis_client.keys()
-        log.info('Found %d PRR Keys' % len(prr_keys))
+        ir_keys = redis_client.keys()
+        log.info('Found %d InvoiceRequest Keys' % len(ir_keys))
 
-        for key in prr_keys:
+        for key in ir_keys:
             try:
                 prr = json.loads(redis_client.hgetall(key).values()[0])
 
-                if datetime.fromtimestamp(int(prr.get('submit_date'))) + timedelta(days=config.prr_expiration_days) < datetime.utcnow():
-                    log.info('Deleting Stale PRR [ID: %s]' % key)
+                if datetime.fromtimestamp(int(prr.get('submit_date'))) + timedelta(days=config.ir_expiration_days) < datetime.utcnow():
+                    log.info('Deleting Stale InvoiceRequest [ID: %s]' % key)
                     redis_client.delete(key)
             except Exception as e:
-                log.error('Exception Occurred Cleaning Up Stale PRR [ID: %s]: %s' % (key, str(e)))
+                log.error('Exception Occurred Cleaning Up Stale InvoiceRequest [ID: %s]: %s' % (key, str(e)))
 
-    # Return PaymentRequest (RPR) Data Handling
-    def add_return_paymentrequest(self, return_paymentrequest):
+    # EncrpytedPaymentRequest (EPR) Data Handling
+    def add_encrypted_paymentrequest(self, encrypted_paymentrequest):
 
-        redis_client = Redis.from_url(config.redis_rpr_data)
+        redis_client = Redis.from_url(config.redis_epr_data)
 
         try:
-            result = redis_client.set(return_paymentrequest['id'], json.dumps(return_paymentrequest, cls=CustomJSONEncoder))
+            result = redis_client.set(encrypted_paymentrequest['id'], json.dumps(encrypted_paymentrequest, cls=CustomJSONEncoder))
             if result != 1:
                 raise Exception('Redis Set Command Failed')
         except Exception as e:
-            log.info('Unable to Add Return PR %s: %s' % (return_paymentrequest['id'], str(e)))
+            log.info('Unable to Add EncryptedPaymentRequest %s: %s' % (encrypted_paymentrequest['id'], str(e)))
             raise
 
-    def get_return_paymentrequest(self, id):
+    def get_encrypted_paymentrequest(self, id):
 
-        redis_client = Redis.from_url(config.redis_rpr_data)
+        redis_client = Redis.from_url(config.redis_epr_data)
 
         try:
             return json.loads(redis_client.get(id))
         except Exception as e:
-            log.info('Unable to Get Return PR %s: %s' % (id, str(e)))
+            log.info('Unable to Get EncryptedPaymentRequest %s: %s' % (id, str(e)))
             raise
 
-    def cleanup_stale_return_paymentrequest_data(self):
+    def cleanup_stale_encrypted_paymentrequest_data(self):
 
-        redis_client = Redis.from_url(config.redis_rpr_data)
+        redis_client = Redis.from_url(config.redis_epr_data)
 
         return_pr_keys = redis_client.keys()
-        log.info('Found %d Return PR Keys' % len(return_pr_keys))
+        log.info('Found %d EncryptedPaymentRequest Keys' % len(return_pr_keys))
 
         for key in return_pr_keys:
             try:
                 return_pr = json.loads(redis_client.get(key))
 
                 if datetime.fromtimestamp(int(return_pr.get('submit_date'))) + timedelta(days=config.rpr_expiration_days) < datetime.utcnow():
-                    log.info('Deleting Stale Return PR [ID: %s]' % key)
+                    log.info('Deleting Stale EncryptedPaymentRequest [ID: %s]' % key)
                     redis_client.delete(key)
             except Exception as e:
-                log.error('Exception Occurred Cleaning Up Stale Return PR [ID: %s]: %s' % (key, str(e)))
+                log.error('Exception Occurred Cleaning Up Stale EncryptedPaymentRequest [ID: %s]: %s' % (key, str(e)))
 
     # Payment Data Handling
     def get_payment_request_meta_data(self, uuid):
@@ -365,3 +365,47 @@ class RedisResolver(BaseResolver):
         del(result['expiration_date'])
 
         return result
+
+    def add_encrypted_payment(self, encrypted_payment):
+
+        redis_client = Redis.from_url(config.redis_epr_data)
+
+        try:
+            result = redis_client.set('payment_%s' % encrypted_payment['id'], json.dumps(encrypted_payment, cls=CustomJSONEncoder))
+            if result != 1:
+                raise Exception('Redis Set Command Failed')
+        except Exception as e:
+            log.info('Unable to Add EncryptedPayment %s: %s' % (encrypted_payment['id'], str(e)))
+            raise
+
+    def get_encrypted_payment(self, id):
+
+        redis_client = Redis.from_url(config.redis_epr_data)
+
+        try:
+            return json.loads(redis_client.get('payment_%s' % id))
+        except Exception as e:
+            log.info('Unable to Get EncryptedPaymentRequest %s: %s' % (id, str(e)))
+            raise
+
+    def add_encrypted_paymentack(self, encrypted_payment_ack):
+
+        redis_client = Redis.from_url(config.redis_epr_data)
+
+        try:
+            result = redis_client.set('paymentack_%s' % encrypted_payment_ack['id'], json.dumps(encrypted_payment_ack, cls=CustomJSONEncoder))
+            if result != 1:
+                raise Exception('Redis Set Command Failed')
+        except Exception as e:
+            log.info('Unable to Add EncryptedPaymentAck %s: %s' % (encrypted_payment_ack['id'], str(e)))
+            raise
+
+    def get_encrypted_paymentack(self, id):
+
+        redis_client = Redis.from_url(config.redis_epr_data)
+
+        try:
+            return json.loads(redis_client.get('paymentack_%s' % id))
+        except Exception as e:
+            log.info('Unable to Get EncryptedPaymentAck %s: %s' % (id, str(e)))
+            raise

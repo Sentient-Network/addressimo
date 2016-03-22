@@ -356,6 +356,7 @@ class TestGetUnusedPresignedPaymentRequest(AddressimoTestCase):
         ]
 
         self.mockRedis.from_url.return_value.get.return_value = False
+        config.store_and_forward_only = False
 
     def test_go_right_no_pr_used(self):
 
@@ -365,7 +366,7 @@ class TestGetUnusedPresignedPaymentRequest(AddressimoTestCase):
         self.assertEqual(1, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
         self.assertEqual(1, self.mockGetAddressFromPR.call_count)
-        self.assertEqual(0, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
         self.assertEqual(0, self.id_obj.save.call_count)
 
     def test_go_right_first_pr_used(self):
@@ -385,6 +386,27 @@ class TestGetUnusedPresignedPaymentRequest(AddressimoTestCase):
         self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.save.call_count)
         self.assertEqual(self.id_obj, self.mockPluginManager.get_plugin.return_value.save.call_args[0][0])
         self.assertNotIn('PR1'.encode('hex'), self.id_obj.presigned_payment_requests)
+
+    def test_go_right_store_and_forward_only(self):
+
+        self.mockRedis.from_url.return_value.get.side_effect = [True, None]
+        config.store_and_forward_only = True
+
+        ret_val = get_unused_presigned_payment_request(self.id_obj)
+
+        self.assertEqual('PR1'.encode('hex'), ret_val)
+        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(0, self.mockRedis.from_url.return_value.get.call_count)
+        self.assertEqual(0, self.mockGetAddressFromPR.call_count)
+        self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
+        self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
+        self.assertEqual('REDIS', self.mockPluginManager.get_plugin.call_args[0][1])
+
+        self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.save.call_count)
+        self.assertEqual(self.id_obj, self.mockPluginManager.get_plugin.return_value.save.call_args[0][0])
+        self.assertNotIn('PR1'.encode('hex'), self.id_obj.presigned_payment_requests)
+
+        config.store_and_forward_only = False
 
 
     def test_go_right_all_pr_used(self):

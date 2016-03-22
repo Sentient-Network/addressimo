@@ -6,8 +6,7 @@ import time
 from flask import Flask, Response, request
 
 from addressimo.config import config
-from addressimo.paymentrequest.ir import IR
-from addressimo.paymentrequest.payment import Payments
+from addressimo.paymentprotocol import *
 from addressimo.plugin import PluginManager
 from addressimo.resolvers import resolve, return_used_branches
 from addressimo.storeforward import StoreForward
@@ -32,7 +31,6 @@ def before_request():
     # Handle our pre-flight OPTIONS check
     if request.method == 'OPTIONS':
         return create_json_response()
-
 
 # ###########################################
 # Setup Rate Limiting
@@ -78,8 +76,8 @@ def resolve_id(id):
 
 @app.route('/address/<id>/resolve', methods=['POST'])
 @limiter.limit("10 per minute")
-def submit_pr_request(id):
-    return IR.submit_invoicerequest(id)
+def submit_ir(id):
+    return submit_invoicerequest(id)
 
 @app.route('/address/<id>/branches', methods=['GET'])
 @limiter.limit("10 per minute")
@@ -109,27 +107,42 @@ def sf_getcount(id):
 @app.route('/address/<id>/invoicerequests', methods=['GET'])
 @limiter.limit("10 per minute")
 def get_invoice_requests(id):
-    return IR.get_queued_invoice_requests(id)
+    return get_queued_invoice_requests(id)
 
 @app.route('/address/<id>/invoicerequests', methods=['POST'])
 @limiter.limit("10 per minute")
-def submit_return_pr(id):
-    return IR.submit_return_paymentrequest(id)
+def submit_epr(id):
+    return submit_encrypted_paymentrequest(id)
 
-@app.route('/returnpaymentrequest/<id>', methods=['GET'])
+@app.route('/encryptedpaymentrequest/<id>', methods=['GET'])
 @limiter.limit("10 per minute")
-def get_return_pr(id):
-    return IR.get_return_paymentrequest(id)
+def get_epr(id):
+    return get_encrypted_paymentrequest(id)
+
+@app.route('/payment/<id>', methods=['GET'])
+@limiter.limit("10 per minute")
+def retrieve_payment(id):
+    return get_encrypted_payment(id)
 
 @app.route('/payment/<id>', methods=['POST'])
 @limiter.limit("10 per minute")
-def process_payment(id):
-    return Payments.process_payment(id)
+def submit_payment(id):
+    return process_payment(id)
+
+@app.route('/paymentack/<id>', methods=['GET'])
+@limiter.limit("10 per minute")
+def retrieve_paymentack(id):
+    return get_encrypted_paymentack(id)
+
+@app.route('/paymentack/<id>', methods=['POST'])
+@limiter.limit("10 per minute")
+def submit_paymentack(id):
+    return process_encrypted_paymentack(id)
 
 @app.route('/payment/<id>/refund/<tx>', methods=['GET'])
 @limiter.limit("10 per minute")
 def retrieve_refund_address(id, tx):
-    return Payments.retrieve_refund_address(id, tx)
+    return retrieve_refund_address(id, tx)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

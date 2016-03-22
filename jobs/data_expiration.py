@@ -10,9 +10,9 @@ PluginManager.register_plugins()
 resolver = PluginManager.get_plugin('RESOLVER', config.resolver_type)
 
 
-log.info('Starting Stale Payment Request Meta Data Cleanup')
+log.info('Starting Stale PaymentRequest Meta Data Cleanup')
 resolver.cleanup_stale_payment_request_meta_data()
-log.info('Completed Stale Payment Request Meta Data Cleanup')
+log.info('Completed Stale PaymentRequest Meta Data Cleanup')
 
 
 log.info('Starting Stale Payment Meta Data Cleanup')
@@ -20,11 +20,11 @@ resolver.cleanup_stale_payment_meta_data()
 log.info('Completed Stale Payment Meta Data Cleanup')
 
 
-log.info('Starting Stale PRR Data Cleanup')
+log.info('Starting Stale InvoiceRequest Data Cleanup')
 resolver.cleanup_stale_invoicerequest_data()
-log.info('Completed Stale PRR Data Cleanup')
+log.info('Completed Stale InvoiceRequest Data Cleanup')
 
 
-log.info('Starting Stale RPR Data Cleanup')
-resolver.cleanup_stale_return_paymentrequest_data()
-log.info('Completed Stale RPR Data Cleanup')
+log.info('Starting Stale EncryptedPaymentRequest Data Cleanup')
+resolver.cleanup_stale_encrypted_paymentrequest_data()
+log.info('Completed Stale EncryptedPaymentRequest Data Cleanup')

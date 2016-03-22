@@ -22,7 +22,7 @@ def resolve(id):
     ###################################
     # Verify Resolver and Request Data
     ###################################
-    if not cache_up_to_date():
+    if not config.store_and_forward_only and not cache_up_to_date():
         log.critical('Address cache not up to date. Refresh Redis cache.')
         return create_json_response(False, 'Address cache not up to date. Please try again later.', 500)
 
@@ -36,9 +36,13 @@ def resolve(id):
         log.error('Unable to retrieve id_obj [ID: %s]' % id)
         return create_json_response(False, 'Unable to retrieve id_obj from database', 404)
 
-    # Handle PRRs
+    # Handle InvoiceRequests
     if id_obj.ir_only:
         return create_json_response(False, 'Endpoint Requires a valid POST to create a PaymentRequest Request', 405, headers={'Allow': 'POST'})
+
+    # Handle Store & Forward-Only Mode
+    if config.store_and_forward_only and not id_obj.presigned_payment_requests:
+        return create_json_response(False, 'Endpoint Unavaiable, This is a Store & Forward ONLY Service', 404)
 
     #################################################################################
     # Determine Wallet Address to Return or Use in BIP70 PaymentRequest Generation

@@ -10,7 +10,7 @@ log = LogUtil.setup_logging()
 
 
 class LocalResolver(BaseResolver):
-    local_prr = {
+    local_ir = {
         "id": "b17330349ca44abb9c086e81987045b6",
         "requester_pubkey": "a5fcadc9b7444f46ae5e4457746e6f2d8a27ded3714944a4a4d0746ffae8b913e688016d35e84c2e9540fec92c2a519e",
         "amount": 0,
@@ -122,12 +122,12 @@ rFhAxdbeHjwhElfusbIPLl8jNikPKYIjynm3P+4oTU8jzSqF6FiOTA==
     def delete(self, id_obj):
         log.info('Delete called on LocalResolver [ID: %d]' % id_obj.id)
 
-    # PaymentRequest Request (PRR) Data Handling
+    # InvoiceRequest Data Handling
     def add_invoicerequest(self, id, ir_data):
         return
 
     def get_invoicerequests(self, id):
-        return [self.local_prr]
+        return [self.local_ir]
 
     def delete_invoicerequest(self, id, ir_id):
         return
@@ -141,14 +141,14 @@ rFhAxdbeHjwhElfusbIPLl8jNikPKYIjynm3P+4oTU8jzSqF6FiOTA==
     def cleanup_stale_invoicerequest_data(self):
         return
 
-    # Return PaymentRequest (RPR) Data Handling
-    def add_return_paymentrequest(self, return_paymentrequest):
+    # EncryptedPaymentRequest (EPR) Data Handling
+    def add_encrypted_paymentrequest(self, encrypted_paymentrequest):
         return
 
-    def get_return_paymentrequest(self, id):
+    def get_encrypted_paymentrequest(self, id):
         return self.local_return_pr
 
-    def cleanup_stale_return_paymentrequest_data(self):
+    def cleanup_stale_encrypted_paymentrequest_data(self):
         return
 
     # Payment Data Handling

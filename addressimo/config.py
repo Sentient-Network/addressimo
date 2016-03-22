@@ -16,11 +16,14 @@ config.bip70_default_expiration = 900
 config.bip72_compatability = True
 config.bip70_audit_log = True
 config.bip70_payment_expiration_days = 61
-config.prr_expiration_days = 30
+config.ir_expiration_days = 30
 config.rpr_expiration_days = 16
 config.ir_nonce_allowable = 5
 config.ir_nonce_db_maxkeys = 100000000
 config.old_nonce_cleanup_size = 1000
+
+# Operational Modes
+config.store_and_forward_only = False
 
 # Presigned Payment Request
 config.presigned_pr_limit = 100
@@ -39,7 +42,7 @@ config.redis_ir_queue = 'redis://localhost:6379/2'
 config.redis_ir_nonce_uri = 'redis://localhost:6379/7'
 config.redis_pr_store = 'redis://localhost:6379/3'
 config.redis_payment_store = 'redis://localhost:6379/4'
-config.redis_rpr_data = 'redis://localhost:6379/5'
+config.redis_epr_data = 'redis://localhost:6379/5'
 config.redis_logdb_uri = 'redis://localhost:6379/6'
 config.redis_address_branch_uri = 'redis://localhost:6379/13'
 config.redis_addr_cache_uri = 'redis://localhost:6379/14'

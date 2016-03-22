@@ -8,7 +8,7 @@ import requests
 from addressimo.config import config
 from addressimo.data import IdObject
 from addressimo.plugin import PluginManager
-from addressimo.paymentrequest.paymentrequest_pb2 import Output, PaymentRequest, PaymentDetails, Payment, PaymentACK
+from addressimo.paymentprotocol.paymentrequest_pb2 import Output, PaymentRequest, PaymentDetails, Payment, PaymentACK
 from addressimo.util import LogUtil
 from ecdsa import SigningKey, curves
 from pybitcointools import *

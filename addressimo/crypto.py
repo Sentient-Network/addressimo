@@ -10,7 +10,7 @@ from pybitcointools import serialize_script, b58check_to_hex, hex_to_b58check, d
 from pycoin.key.BIP32Node import BIP32Node
 from redis import Redis
 
-from addressimo.paymentrequest.paymentrequest_pb2 import PaymentRequest, PaymentDetails, X509Certificates
+from addressimo.paymentprotocol.paymentrequest_pb2 import PaymentRequest, PaymentDetails, X509Certificates
 from addressimo.config import config
 from addressimo.plugin import PluginManager
 from addressimo.util import LogUtil
@@ -122,9 +122,16 @@ def generate_payment_request(crypto_addr, x509_cert, expires, signer=None, amoun
 def get_unused_presigned_payment_request(id_obj):
 
     redis_conn = Redis.from_url(config.redis_addr_cache_uri)
+    resolver = PluginManager.get_plugin('RESOLVER', config.resolver_type)
 
     return_pr = None
     used_pr = []
+
+    if config.store_and_forward_only and id_obj.presigned_payment_requests:
+        return_pr = id_obj.presigned_payment_requests[0]
+        id_obj.presigned_payment_requests.remove(return_pr)
+        resolver.save(id_obj)
+        return return_pr
 
     for pr in id_obj.presigned_payment_requests:
 
@@ -139,7 +146,6 @@ def get_unused_presigned_payment_request(id_obj):
         id_obj.presigned_payment_requests.remove(pr)
 
     if used_pr:
-        resolver = PluginManager.get_plugin('RESOLVER', config.resolver_type)
         resolver.save(id_obj)
 
     return return_pr
