@@ -76,8 +76,8 @@ def resolve_id(id):
 
 @app.route('/address/<id>/resolve', methods=['POST'])
 @limiter.limit("10 per minute")
-def submit_ir(id):
-    return submit_invoicerequest(id)
+def submit_invoicerequest(id):
+    return submit_paymentprotocol_message(id=id, ignore_pubkey_verify=True)
 
 @app.route('/address/<id>/branches', methods=['GET'])
 @limiter.limit("10 per minute")
@@ -104,45 +104,37 @@ def remove_sf_endpoint(id):
 def sf_getcount(id):
     return StoreForward.get_count()
 
-@app.route('/address/<id>/invoicerequests', methods=['GET'])
-@limiter.limit("10 per minute")
-def get_invoice_requests(id):
-    return get_queued_invoice_requests(id)
 
-@app.route('/address/<id>/invoicerequests', methods=['POST'])
+# BIP75 Payment Protocol Endpoints
+@app.route('/address/<id>/paymentprotocol', methods=['GET'])
 @limiter.limit("10 per minute")
-def submit_epr(id):
-    return submit_encrypted_paymentrequest(id)
+def get_pp_messages(id):
+    return get_paymentprotocol_messages(id=id)
 
-@app.route('/encryptedpaymentrequest/<id>', methods=['GET'])
+@app.route('/address/<id>/paymentprotocol', methods=['POST'])
 @limiter.limit("10 per minute")
-def get_epr(id):
-    return get_encrypted_paymentrequest(id)
+def submit_pp_message(id):
+    return submit_paymentprotocol_message(id=id)
 
-@app.route('/payment/<id>', methods=['GET'])
+@app.route('/address/<id>/paymentprotocol/<identifier>/<message_type>', methods=['DELETE'])
 @limiter.limit("10 per minute")
-def retrieve_payment(id):
-    return get_encrypted_payment(id)
+def delete_pp_messag(id, identifier, message_type):
+    return delete_paymentprotocol_message(identifier, message_type, id=id)
 
-@app.route('/payment/<id>', methods=['POST'])
+@app.route('/paymentprotocol/<tx_id>', methods=['GET'])
 @limiter.limit("10 per minute")
-def submit_payment(id):
-    return process_payment(id)
+def get_pp_tx_messages(tx_id):
+    return get_paymentprotocol_messages(tx_id=tx_id, ignore_pubkey_verify=True)
 
-@app.route('/paymentack/<id>', methods=['GET'])
+@app.route('/paymentprotocol/<tx_id>', methods=['POST'])
 @limiter.limit("10 per minute")
-def retrieve_paymentack(id):
-    return get_encrypted_paymentack(id)
+def submit_pp_tx_message(tx_id):
+    return submit_paymentprotocol_message(tx_id=tx_id, ignore_pubkey_verify=True)
 
-@app.route('/paymentack/<id>', methods=['POST'])
+@app.route('/paymentprotocol/<tx_id>/<identifier>/<message_type>', methods=['DELETE'])
 @limiter.limit("10 per minute")
-def submit_paymentack(id):
-    return process_encrypted_paymentack(id)
-
-@app.route('/payment/<id>/refund/<tx>', methods=['GET'])
-@limiter.limit("10 per minute")
-def retrieve_refund_address(id, tx):
-    return retrieve_refund_address(id, tx)
+def delete_pp_tx_message(tx_id, identifier, message_type):
+    return delete_paymentprotocol_message(identifier, message_type, tx_id=tx_id)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

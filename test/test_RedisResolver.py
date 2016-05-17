@@ -52,7 +52,7 @@ class TestGetIdObj(AddressimoTestCase):
         ret_obj = self.rr.get_id_obj('id')
 
         # Validate calls
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual('id', self.mockRedis.from_url.return_value.get.call_args[0][0])
 
         # Verify id_obj updated with Redis data
@@ -67,7 +67,7 @@ class TestGetIdObj(AddressimoTestCase):
         ret_obj = self.rr.get_id_obj('id')
 
         # Validate calls
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual('id', self.mockRedis.from_url.return_value.get.call_args[0][0])
 
         # Verify id_obj is None
@@ -81,7 +81,7 @@ class TestGetIdObj(AddressimoTestCase):
         ret_obj = self.rr.get_id_obj('id')
 
         # Validate calls
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual('id', self.mockRedis.from_url.return_value.get.call_args[0][0])
 
         # Verify id_obj is None
@@ -204,12 +204,13 @@ class TestSetLGIndex(AddressimoTestCase):
 
 
 class TestSave(AddressimoTestCase):
+
     def setUp(self):
         self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-        self.patcher2 = patch('addressimo.resolvers.RedisResolver.uuid4')
+        self.patcher2 = patch('addressimo.resolvers.RedisResolver.RedisResolver.generate_unique_id')
 
         self.mockRedis = self.patcher1.start()
-        self.mockUuid4 = self.patcher2.start()
+        self.mockGenerateUniqueId = self.patcher2.start()
 
         from addressimo.data import IdObject
 
@@ -228,30 +229,12 @@ class TestSave(AddressimoTestCase):
 
         # Validate calls
         self.assertEqual(self.mockRedis.from_url.return_value.set.return_value, ret_val)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
         call_args = self.mockRedis.from_url.return_value.set.call_args[0]
         self.assertEqual(self.mock_id_obj.id, call_args[0])
         self.assertEqual(json.dumps(self.mock_id_obj), call_args[1])
-        self.assertFalse(self.mockUuid4.called)
-
-    def test_no_id(self):
-
-        self.mock_id_obj.id = None
-        self.mockRedis.from_url.return_value.get.side_effect = [True, None]
-        self.mockUuid4.return_value.hex = '0123456789abcdef'
-
-        ret_val = self.rr.save(self.mock_id_obj)
-
-        # Validate calls
-        self.assertEqual(self.mockRedis.from_url.return_value.set.return_value, ret_val)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        call_args = self.mockRedis.from_url.return_value.set.call_args[0]
-        self.assertEqual('0123456789abcdef', call_args[0])
-        self.assertEqual(json.dumps(self.mock_id_obj), call_args[1])
-
-        self.assertEqual(2, self.mockUuid4.call_count)
+        self.assertFalse(self.mockGenerateUniqueId.called)
 
     def test_exception_saving_redis_data(self):
 
@@ -261,7 +244,7 @@ class TestSave(AddressimoTestCase):
         self.assertRaises(Exception, self.rr.save, self.mock_id_obj)
 
         # Validate calls
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
         call_args = self.mockRedis.from_url.return_value.set.call_args[0]
         self.assertEqual(self.mock_id_obj.id, call_args[0])
@@ -289,7 +272,7 @@ class TestDelete(AddressimoTestCase):
 
         # Validate calls
         self.assertEqual(self.mockRedis.from_url.return_value.delete.return_value, ret_val)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.delete.call_count)
         call_args = self.mockRedis.from_url.return_value.delete.call_args[0]
         self.assertEqual(self.mock_id_obj.id, call_args[0])
@@ -302,655 +285,491 @@ class TestDelete(AddressimoTestCase):
         self.assertRaises(Exception, self.rr.delete, self.mock_id_obj)
 
         # Validate calls
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.delete.call_count)
         call_args = self.mockRedis.from_url.return_value.delete.call_args[0]
         self.assertEqual(self.mock_id_obj.id, call_args[0])
 
-
-class TestAddInvoiceRequest(AddressimoTestCase):
+#################################################
+# Payment Protocol Implementation (BIP75) Tests
+#################################################
+class TestGetPaymentProtocolMessages(AddressimoTestCase):
 
     def setUp(self):
 
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-        self.patcher2 = patch('addressimo.resolvers.RedisResolver.uuid4')
+        self.patcher1 = patch('addressimo.resolvers.RedisResolver.b64decode')
+        self.patcher2 = patch('addressimo.resolvers.RedisResolver.Redis')
 
-        self.mockRedis = self.patcher1.start()
-        self.mockUuid4 = self.patcher2.start()
+        self.mockB64decode = self.patcher1.start()
+        self.mockRedis = self.patcher2.start()
 
-        self.mockRedis.from_url.return_value.exists.return_value = False
-        self.mockRedis.from_url.return_value.hset.return_value = 1
-        self.mockUuid4.return_value.hex = 'uuid4'
+        self.mockTxMapClient = MagicMock()
+        self.mockTxClient = MagicMock()
 
-        self.submit_id = 'endpoint_id'
-        self.ir_data = {'key': 'value'}
+        # Setup Mock Redis Data
+        self.mockTxMapClient.llen.return_value = 1
+        self.mockTxMapClient.lrange.return_value = ['mapped_tx_id']
+        self.mockTxClient.hgetall.return_value = {'key':'val', 'messages': json.dumps(['1', '2'])}
 
-        # Setup redis resolver
         self.rr = RedisResolver()
+        self.rr.tx_map_client = self.mockTxMapClient
+        self.rr.tx_client = self.mockTxClient
 
-    def test_go_right(self):
+    def test_id_go_right(self):
 
-        result = self.rr.add_invoicerequest(self.submit_id, self.ir_data)
+        ret = self.rr.get_paymentprotocol_messages(id='id')
 
-        self.assertIsNotNone(result)
-        self.assertEqual('uuid4uuid4uuid4', result.get('id'))
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(3, self.mockUuid4.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.exists.call_count)
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.exists.call_args[0][0])
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hset.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hset.call_args[0][0])
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.hset.call_args[0][1])
-        self.assertEqual('{"id": "uuid4uuid4uuid4", "key": "value"}', self.mockRedis.from_url.return_value.hset.call_args[0][2])
+        self.assertEqual(1, self.mockTxMapClient.llen.call_count)
+        self.assertEqual('id', self.mockTxMapClient.llen.call_args[0][0])
+        self.assertEqual(1, self.mockTxMapClient.lrange.call_count)
+        self.assertEqual('id', self.mockTxMapClient.lrange.call_args[0][0])
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_args[0][1])
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_args[0][2])
 
-    def test_ppr_id_exists_once(self):
+        self.assertEqual(1, self.mockTxClient.hgetall.call_count)
+        self.assertEqual('mapped_tx_id', self.mockTxClient.hgetall.call_args[0][0])
 
-        self.mockRedis.from_url.return_value.exists.side_effect = [True, False]
+        self.assertIsNotNone(ret)
+        self.assertEqual(1, len(ret.keys()))
+        self.assertIn('mapped_tx_id', ret)
+        self.assertEqual('val', ret['mapped_tx_id']['key'])
+        self.assertEqual([self.mockB64decode.return_value, self.mockB64decode.return_value], ret['mapped_tx_id']['messages'])
 
-        result = self.rr.add_invoicerequest(self.submit_id, self.ir_data)
+    def test_tx_id_go_right(self):
 
-        self.assertIsNotNone(result)
-        self.assertEqual('uuid4uuid4uuid4', result.get('id'))
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(6, self.mockUuid4.call_count)
-        self.assertEqual(2, self.mockRedis.from_url.return_value.exists.call_count)
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.exists.call_args[0][0])
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hset.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hset.call_args[0][0])
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.hset.call_args[0][1])
-        self.assertEqual('{"id": "uuid4uuid4uuid4", "key": "value"}', self.mockRedis.from_url.return_value.hset.call_args[0][2])
+        ret = self.rr.get_paymentprotocol_messages(tx_id='tx_id')
 
-    def test_exists_exception(self):
+        self.assertEqual(0, self.mockTxMapClient.llen.call_count)
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_count)
 
-        self.mockRedis.from_url.return_value.exists.side_effect = Exception()
+        self.assertEqual(1, self.mockTxClient.hgetall.call_count)
+        self.assertEqual('tx_id', self.mockTxClient.hgetall.call_args[0][0])
 
-        self.assertRaises(Exception, self.rr.add_invoicerequest, self.submit_id, self.ir_data)
+        self.assertIsNotNone(ret)
+        self.assertEqual(1, len(ret.keys()))
+        self.assertIn('tx_id', ret)
+        self.assertEqual('val', ret['tx_id']['key'])
+        self.assertEqual([self.mockB64decode.return_value, self.mockB64decode.return_value], ret['tx_id']['messages'])
 
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(3, self.mockUuid4.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.exists.call_count)
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.exists.call_args[0][0])
-        self.assertEqual(0, self.mockRedis.from_url.return_value.hset.call_count)
+    def test_no_tx_ids(self):
 
-    def test_hset_returns_not_one(self):
+        self.mockTxMapClient.llen.return_value = 0
 
-        self.mockRedis.from_url.return_value.hset.return_value = 0
+        ret = self.rr.get_paymentprotocol_messages(id='id')
 
-        result = self.rr.add_invoicerequest(self.submit_id, self.ir_data)
+        self.assertEqual(1, self.mockTxMapClient.llen.call_count)
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_count)
+        self.assertEqual(0, self.mockTxClient.hgetall.call_count)
+        self.assertEqual({}, ret)
 
-        self.assertIsNone(result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(3, self.mockUuid4.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.exists.call_count)
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.exists.call_args[0][0])
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hset.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hset.call_args[0][0])
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.hset.call_args[0][1])
-        self.assertEqual('{"id": "uuid4uuid4uuid4", "key": "value"}', self.mockRedis.from_url.return_value.hset.call_args[0][2])
+    def test_no_tx_data(self):
 
-    def test_hset_exception(self):
+        self.mockTxClient.hgetall.return_value = None
+        ret = self.rr.get_paymentprotocol_messages(id='id')
+        self.assertEqual({}, ret)
 
-        self.mockRedis.from_url.return_value.hset.side_effect = Exception()
+    def test_no_messages(self):
 
-        self.assertRaises(Exception, self.rr.add_invoicerequest, self.submit_id, self.ir_data)
+        del self.mockTxClient.hgetall.return_value['messages']
+        ret = self.rr.get_paymentprotocol_messages(id='id')
+        self.assertEqual('val', ret['mapped_tx_id']['key'])
+        self.assertEqual([], ret['mapped_tx_id']['messages'])
 
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(3, self.mockUuid4.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.exists.call_count)
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.exists.call_args[0][0])
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hset.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hset.call_args[0][0])
-        self.assertEqual('uuid4uuid4uuid4', self.mockRedis.from_url.return_value.hset.call_args[0][1])
-        self.assertEqual('{"id": "uuid4uuid4uuid4", "key": "value"}', self.mockRedis.from_url.return_value.hset.call_args[0][2])
-
-
-class TestGetIRs(AddressimoTestCase):
+class TestAddPaymentProtocolMessage(AddressimoTestCase):
 
     def setUp(self):
 
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
+        self.patcher1 = patch('addressimo.resolvers.RedisResolver.b64encode')
+        self.patcher2 = patch('addressimo.resolvers.RedisResolver.Redis')
+        self.patcher3 = patch('addressimo.resolvers.RedisResolver.RedisResolver.generate_unique_id')
+        self.patcher4 = patch('addressimo.resolvers.RedisResolver.datetime')
 
-        self.mockRedis = self.patcher1.start()
+        self.mockB64encode = self.patcher1.start()
+        self.mockRedis = self.patcher2.start()
+        self.mockGenerateUniqueId = self.patcher3.start()
+        self.mockDatetime = self.patcher4.start()
 
-        self.mockRedis.from_url.return_value.hgetall.return_value = {
-            "key1": json.dumps({"key1":"value1"}),
-            "key2": json.dumps({"key2":"value2"})
+        self.mockTxMapClient = MagicMock()
+        self.mockTxClient = MagicMock()
+
+        # Setup Mock Redis Data
+        self.mockTxMapClient.llen.return_value = 1
+        self.mockTxMapClient.lrange.return_value = ['mapped_tx_id']
+        self.mockTxClient.hgetall.return_value = {'key': 'val', 'messages': json.dumps(['1', '2'])}
+        self.mockTxClient.hget.return_value = 'msg_identifier'
+
+        self.rr = RedisResolver()
+        self.rr.tx_map_client = self.mockTxMapClient
+        self.rr.tx_client = self.mockTxClient
+
+        self.mockGenerateUniqueId.return_value = 'unique_id'
+
+        self.message = EncryptedProtocolMessage()
+        self.message.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
+        self.message.encrypted_message = 'deadbeef'
+        self.message.receiver_public_key = 'deadbeef'
+        self.message.sender_public_key = 'deadbeef'
+        self.message.identifier = 'msg_identifier'
+        self.message.nonce = 42
+
+        self.non_encrypted_message = ProtocolMessage()
+        self.non_encrypted_message.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
+        self.non_encrypted_message.serialized_message = 'deadbeef'
+        self.non_encrypted_message.identifier = 'msg_identifier'
+
+        self.mockB64encode.return_value = 'base64encoded_result'
+        self.mockDatetime.utcnow.return_value.strftime.return_value = 'utcnow'
+
+    def test_go_right_tx_id_existing_tx(self):
+
+        ret = self.rr.add_paymentprotocol_message(self.message, tx_id='tx_id')
+
+        self.assertEqual('tx_id', ret)
+
+        self.assertEqual(0, self.mockTxMapClient.llen.call_count)
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_count)
+
+        self.assertEqual(1, self.mockTxClient.hget.call_count)
+        self.assertEqual('tx_id', self.mockTxClient.hget.call_args[0][0])
+        self.assertEqual('identifier', self.mockTxClient.hget.call_args[0][1])
+
+        self.assertEqual(1, self.mockTxClient.hgetall.call_count)
+        self.assertEqual('tx_id', self.mockTxClient.hgetall.call_args[0][0])
+
+        self.assertEqual(1, self.mockB64encode.call_count)
+        self.assertEqual(self.message.SerializeToString(), self.mockB64encode.call_args[0][0])
+
+        self.assertEqual(3, len(json.loads(self.mockTxClient.hgetall.return_value['messages'])))
+        self.assertIn('base64encoded_result', json.loads(self.mockTxClient.hgetall.return_value['messages']))
+        self.assertEqual('utcnow', self.mockTxClient.hgetall.return_value['last_updated'])
+        self.assertEqual(42, self.mockTxClient.hgetall.return_value['last_nonce'])
+
+    def test_go_right_id_new_tx_invoicerequest(self):
+
+        self.mockTxClient.hget.return_value = 'another_identifier'
+
+        ret = self.rr.add_paymentprotocol_message(self.message, id='id')
+
+        self.assertEqual('unique_id', ret)
+
+        self.assertEqual(1, self.mockTxMapClient.llen.call_count)
+        self.assertEqual('id', self.mockTxMapClient.llen.call_args[0][0])
+        self.assertEqual(1, self.mockTxMapClient.lrange.call_count)
+
+        self.assertEqual('id', self.mockTxMapClient.lrange.call_args[0][0])
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_args[0][1])
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_args[0][2])
+
+        self.assertEqual(1, self.mockTxClient.hget.call_count)
+        self.assertEqual('mapped_tx_id', self.mockTxClient.hget.call_args[0][0])
+        self.assertEqual('identifier', self.mockTxClient.hget.call_args[0][1])
+
+        self.assertEqual(0, self.mockTxClient.hgetall.call_count)
+
+        self.assertEqual(1, self.mockB64encode.call_count)
+        self.assertEqual(self.message.SerializeToString(), self.mockB64encode.call_args[0][0])
+
+        self.assertEqual(1, self.mockGenerateUniqueId.call_count)
+        self.assertEqual(1, self.mockTxClient.hmset.call_count)
+        self.assertEqual('unique_id', self.mockTxClient.hmset.call_args[0][0])
+        self.assertIn('base64encoded_result', json.loads(self.mockTxClient.hmset.call_args[0][1]['messages']))
+        self.assertEqual('id', self.mockTxClient.hmset.call_args[0][1]['receiver'])
+        self.assertEqual('msg_identifier', self.mockTxClient.hmset.call_args[0][1]['identifier'])
+        self.assertEqual('utcnow', self.mockTxClient.hmset.call_args[0][1]['last_updated'])
+        self.assertEqual(42, self.mockTxClient.hmset.call_args[0][1]['last_nonce'])
+
+        self.assertEqual(1, self.mockTxMapClient.rpush.call_count)
+        self.assertEqual('id', self.mockTxMapClient.rpush.call_args[0][0])
+        self.assertEqual('unique_id', self.mockTxMapClient.rpush.call_args[0][1])
+
+    def test_id_new_tx_paymentrequest(self):
+
+        self.mockTxClient.hget.return_value = 'another_identifier'
+        self.message.message_type = ProtocolMessageType.Value('PAYMENT_REQUEST')
+
+        ret = self.rr.add_paymentprotocol_message(self.message, id='id')
+
+        self.assertIsNone(ret)
+
+        self.assertEqual(1, self.mockTxMapClient.llen.call_count)
+        self.assertEqual('id', self.mockTxMapClient.llen.call_args[0][0])
+        self.assertEqual(1, self.mockTxMapClient.lrange.call_count)
+
+        self.assertEqual('id', self.mockTxMapClient.lrange.call_args[0][0])
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_args[0][1])
+        self.assertEqual(0, self.mockTxMapClient.lrange.call_args[0][2])
+
+        self.assertEqual(1, self.mockTxClient.hget.call_count)
+        self.assertEqual('mapped_tx_id', self.mockTxClient.hget.call_args[0][0])
+        self.assertEqual('identifier', self.mockTxClient.hget.call_args[0][1])
+
+        self.assertEqual(0, self.mockB64encode.call_count)
+        self.assertEqual(0, self.mockGenerateUniqueId.call_count)
+
+    def test_id_new_tx_invoicerequest_non_encrypted(self):
+
+        self.mockTxClient.hget.return_value = 'another_identifier'
+        self.rr.add_paymentprotocol_message(self.non_encrypted_message, id='id')
+        self.assertNotIn('last_nonce', self.mockTxClient.hmset.call_args[0][1])
+
+    def test_tx_id_existing_tx_non_encrypted(self):
+
+        self.rr.add_paymentprotocol_message(self.non_encrypted_message, tx_id='tx_id')
+        self.assertNotIn('last_nonce', self.mockTxClient.hmset.call_args[0][1])
+
+class TestDeletePaymentProtocolMessage(AddressimoTestCase):
+
+    def setUp(self):
+
+        self.patcher1 = patch('addressimo.resolvers.RedisResolver.RedisResolver.get_paymentprotocol_messages')
+        self.patcher2 = patch('addressimo.resolvers.RedisResolver.Redis')
+        self.patcher3 = patch('addressimo.resolvers.RedisResolver.b64encode')
+
+        self.mockGetPaymentProtocolMessages = self.patcher1.start()
+        self.mockRedis = self.patcher2.start()
+        self.mockB64Encode = self.patcher3.start()
+
+        self.mockB64Encode.return_value = 'b64encoded'
+
+        self.mockTxMapClient = MagicMock()
+        self.mockTxClient = MagicMock()
+
+        # Setup Mock Redis Data
+        self.mockTxMapClient.llen.return_value = 1
+        self.mockTxMapClient.lrange.return_value = ['mapped_tx_id']
+        self.mockTxClient.hgetall.return_value = {'key': 'val', 'messages': json.dumps(['1', '2'])}
+        self.mockTxClient.hget.return_value = 'msg_identifier'
+
+        self.rr = RedisResolver()
+        self.rr.tx_map_client = self.mockTxMapClient
+        self.rr.tx_client = self.mockTxClient
+
+        # Setup Protocol Messages
+        self.message = EncryptedProtocolMessage()
+        self.message.message_type = ProtocolMessageType.Value('PAYMENT_REQUEST')
+        self.message.encrypted_message = 'deadbeef'
+        self.message.receiver_public_key = 'deadbeef'
+        self.message.sender_public_key = 'deadbeef'
+        self.message.identifier = 'msg_identifier'
+        self.message.nonce = 42
+
+        self.non_encrypted_message = ProtocolMessage()
+        self.non_encrypted_message.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
+        self.non_encrypted_message.serialized_message = 'deadbeef'
+        self.non_encrypted_message.identifier = 'msg_identifier'
+
+        self.mockGetPaymentProtocolMessages.return_value = {
+            'tx_id1': {
+                'receiver': 'receiver_id',
+                'messages': [self.non_encrypted_message.SerializeToString(), self.message.SerializeToString()]
+            }
         }
 
-        self.submit_id = 'endpoint_id'
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
     def test_go_right(self):
 
-        result = self.rr.get_invoicerequests(self.submit_id)
+        ret = self.rr.delete_paymentprotocol_message('msg_identifier', 'invoice_request', id='id')
 
-        self.assertIsNotNone(result)
-        self.assertEqual(2, len(result))
-        self.assertIn("key2", result[0])
-        self.assertIn("key1", result[1])
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
+        self.assertTrue(ret)
 
-    def test_go_right_with_irid(self):
+        self.assertEqual(1, self.mockGetPaymentProtocolMessages.call_count)
+        self.assertEqual('id', self.mockGetPaymentProtocolMessages.call_args[0][0])
 
-        self.mockRedis.from_url.return_value.hget.return_value = json.dumps({"key1":"value1"})
+        self.assertEqual(0, self.mockTxClient.delete.call_count)
+        self.assertEqual(0, self.mockTxMapClient.lrem.call_count)
 
-        result = self.rr.get_invoicerequests(self.submit_id, 'ir_id')
+        self.assertEqual(1, self.mockB64Encode.call_count)
 
-        self.assertIsNotNone(result)
-        self.assertEqual({"key1":"value1"}, result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(0, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hget.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hget.call_args[0][0])
-        self.assertEqual('ir_id', self.mockRedis.from_url.return_value.hget.call_args[0][1])
+        self.assertEqual(1, self.mockTxClient.hmset.call_count)
+        self.assertEqual('tx_id1', self.mockTxClient.hmset.call_args[0][0])
+        self.assertEqual(1, len(json.loads(self.mockTxClient.hmset.call_args[0][1]['messages'])))
+        self.assertEqual('b64encoded', json.loads(self.mockTxClient.hmset.call_args[0][1]['messages'])[0])
 
-    def test_go_right_with_irid_notfound(self):
+    def test_empty_tx_after_delete(self):
 
-        self.mockRedis.from_url.return_value.hget.return_value = None
+        self.mockGetPaymentProtocolMessages.return_value['tx_id1']['messages'] = [self.non_encrypted_message.SerializeToString()]
 
-        result = self.rr.get_invoicerequests(self.submit_id, 'ir_id')
+        ret = self.rr.delete_paymentprotocol_message('msg_identifier', 'invoice_request', id='id')
 
-        self.assertIsNone(result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(0, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hget.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hget.call_args[0][0])
-        self.assertEqual('ir_id', self.mockRedis.from_url.return_value.hget.call_args[0][1])
+        self.assertTrue(ret)
 
-    def test_go_no_values(self):
+        self.assertEqual(1, self.mockGetPaymentProtocolMessages.call_count)
+        self.assertEqual('id', self.mockGetPaymentProtocolMessages.call_args[0][0])
 
-        self.mockRedis.from_url.return_value.hgetall.return_value = {}
+        self.assertEqual(1, self.mockTxClient.delete.call_count)
+        self.assertEqual('tx_id1', self.mockTxClient.delete.call_args[0][0])
 
-        result = self.rr.get_invoicerequests(self.submit_id)
+        self.assertEqual(1, self.mockTxMapClient.lrem.call_count)
+        self.assertEqual('id', self.mockTxMapClient.lrem.call_args[0][0])
+        self.assertEqual('tx_id1', self.mockTxMapClient.lrem.call_args[0][1])
+        self.assertEqual(0, self.mockTxMapClient.lrem.call_args[0][2])
 
-        self.assertIsNotNone(result)
-        self.assertEqual(0, len(result))
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
+        self.assertEqual(0, self.mockB64Encode.call_count)
+        self.assertEqual(0, self.mockTxClient.hmset.call_count)
 
-    def test_redis_exception(self):
+    def test_empty_tx_after_delete_passing_in_tx_id(self):
 
-        self.mockRedis.from_url.return_value.hgetall.side_effect = Exception
+        self.mockGetPaymentProtocolMessages.return_value['tx_id1']['messages'] = [self.non_encrypted_message.SerializeToString()]
 
-        self.assertRaises(Exception, self.rr.get_invoicerequests, self.submit_id)
+        ret = self.rr.delete_paymentprotocol_message('msg_identifier', 'invoice_request', tx_id='in_id')
 
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
+        self.assertTrue(ret)
+
+        self.assertEqual(1, self.mockGetPaymentProtocolMessages.call_count)
+        self.assertEqual('in_id', self.mockGetPaymentProtocolMessages.call_args[0][1])
+
+        self.assertEqual(1, self.mockTxClient.delete.call_count)
+        self.assertEqual('tx_id1', self.mockTxClient.delete.call_args[0][0])
+
+        self.assertEqual(1, self.mockTxMapClient.lrem.call_count)
+        self.assertEqual('receiver_id', self.mockTxMapClient.lrem.call_args[0][0])
+        self.assertEqual('tx_id1', self.mockTxMapClient.lrem.call_args[0][1])
+        self.assertEqual(0, self.mockTxMapClient.lrem.call_args[0][2])
+
+        self.assertEqual(0, self.mockB64Encode.call_count)
+        self.assertEqual(0, self.mockTxClient.hmset.call_count)
+
+    def test_not_updates(self):
+
+        ret = self.rr.delete_paymentprotocol_message('msg_identifier', 'payment_ack', id='id')
+
+        self.assertFalse(ret)
+
+        self.assertEqual(1, self.mockGetPaymentProtocolMessages.call_count)
+        self.assertEqual('id', self.mockGetPaymentProtocolMessages.call_args[0][0])
+
+        self.assertEqual(0, self.mockTxClient.delete.call_count)
+        self.assertEqual(0, self.mockTxMapClient.lrem.call_count)
+        self.assertEqual(0, self.mockB64Encode.call_count)
+        self.assertEqual(0, self.mockTxClient.hmset.call_count)
 
 
-class TestDeleteInvoiceRequest(AddressimoTestCase):
-
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-
-        self.mockRedis = self.patcher1.start()
-
-        self.mockRedis.from_url.return_value.hdel.return_value = 1
-        self.submit_id = 'endpoint_id'
-        self.ir_id = 'ir_id'
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        result = self.rr.delete_invoicerequest(self.submit_id, self.ir_id)
-
-        self.assertTrue(result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hdel.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hdel.call_args[0][0])
-        self.assertEqual(self.ir_id, self.mockRedis.from_url.return_value.hdel.call_args[0][1])
-
-    def test_no_delete(self):
-
-        self.mockRedis.from_url.return_value.hdel.return_value = 0
-
-        result = self.rr.delete_invoicerequest(self.submit_id, self.ir_id)
-
-        self.assertFalse(result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hdel.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hdel.call_args[0][0])
-        self.assertEqual(self.ir_id, self.mockRedis.from_url.return_value.hdel.call_args[0][1])
-
-    def test_exception(self):
-
-        self.mockRedis.from_url.return_value.hdel.side_effect = Exception()
-
-        self.assertRaises(Exception, self.rr.delete_invoicerequest, self.submit_id, self.ir_id)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hdel.call_count)
-        self.assertEqual(self.submit_id, self.mockRedis.from_url.return_value.hdel.call_args[0][0])
-        self.assertEqual(self.ir_id, self.mockRedis.from_url.return_value.hdel.call_args[0][1])
-
-class TestSetIRNonce(AddressimoTestCase):
+class TestCleanupStalePaymentProtocolMessages(AddressimoTestCase):
 
     def setUp(self):
+        self.patcher1 = patch('addressimo.resolvers.RedisResolver.RedisResolver.get_paymentprotocol_messages')
+        self.patcher2 = patch('addressimo.resolvers.RedisResolver.Redis')
+        self.patcher3 = patch('addressimo.resolvers.RedisResolver.datetime')
 
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-        self.patcher2 = patch('addressimo.resolvers.RedisResolver.time')
-        self.patcher3 = patch('addressimo.resolvers.RedisResolver.RedisResolver.cleanup_oldest_nonces')
+        self.mockGetPaymentProtocolMessages = self.patcher1.start()
+        self.mockRedis = self.patcher2.start()
+        self.mockDatetime = self.patcher3.start()
 
-        self.mockRedis = self.patcher1.start()
-        self.mockTime = self.patcher2.start()
-        self.mockCleanupOldestNonces = self.patcher3.start()
+        self.mockDatetime.utcfromtimestamp.return_value = datetime(year=2016, month=1, day=15)
+        self.mockDatetime.utcnow.return_value = datetime(year=2016, month=1, day=30)
 
-        self.mockClient = MagicMock()
-        self.mockClient.dbsize.return_value = 2
-        self.mockRedis.from_url.return_value = self.mockClient
+        self.mockTxMapClient = MagicMock()
+        self.mockTxClient = MagicMock()
 
-        self.mockTime.time.return_value = 42.2
-
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
-
-        retval = self.rr.set_invoicerequest_nonce(TEST_PUBKEY1, TEST_PUBKEY2, 123456)
-
-        self.assertIsNotNone(retval)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockClient.dbsize.call_count)
-        self.assertEqual(0, self.mockCleanupOldestNonces.call_count)
-
-        self.assertEqual(1, self.mockClient.hmset.call_count)
-        self.assertEqual(test_key, self.mockClient.hmset.call_args[0][0])
-        self.assertEqual(42, self.mockClient.hmset.call_args[0][1]['updated'])
-        self.assertEqual(123456, self.mockClient.hmset.call_args[0][1]['nonce'])
-
-    def test_go_right_maxkeys_reached(self):
-
-        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
-        self.mockClient.dbsize.return_value = config.ir_nonce_db_maxkeys + 1
-
-        retval = self.rr.set_invoicerequest_nonce(TEST_PUBKEY1, TEST_PUBKEY2, 123456)
-
-        self.assertIsNotNone(retval)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockClient.dbsize.call_count)
-        self.assertEqual(1, self.mockCleanupOldestNonces.call_count)
-
-        self.assertEqual(1, self.mockClient.hmset.call_count)
-        self.assertEqual(test_key, self.mockClient.hmset.call_args[0][0])
-        self.assertEqual(42, self.mockClient.hmset.call_args[0][1]['updated'])
-        self.assertEqual(123456, self.mockClient.hmset.call_args[0][1]['nonce'])
-
-    def test_redis_exception(self):
-
-        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
-        self.mockClient.hmset.side_effect = Exception()
-
-        self.assertRaises(Exception, self.rr.set_invoicerequest_nonce, TEST_PUBKEY1, TEST_PUBKEY2, 123456)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockClient.dbsize.call_count)
-        self.assertEqual(0, self.mockCleanupOldestNonces.call_count)
-
-        self.assertEqual(1, self.mockClient.hmset.call_count)
-        self.assertEqual(test_key, self.mockClient.hmset.call_args[0][0])
-        self.assertEqual(42, self.mockClient.hmset.call_args[0][1]['updated'])
-        self.assertEqual(123456, self.mockClient.hmset.call_args[0][1]['nonce'])
-
-class TestGetIRNonce(AddressimoTestCase):
-
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-
-        self.mockRedis = self.patcher1.start()
-
-        self.mockClient = MagicMock()
-        self.mockClient.hget.return_value = 'RETVAL'
-        self.mockRedis.from_url.return_value = self.mockClient
-
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
-
-        retval = self.rr.get_invoicerequest_nonce(TEST_PUBKEY1, TEST_PUBKEY2)
-
-        self.assertEqual('RETVAL', retval)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-
-        self.assertEqual(1, self.mockClient.hget.call_count)
-        self.assertEqual(test_key, self.mockClient.hget.call_args[0][0])
-        self.assertEqual('nonce', self.mockClient.hget.call_args[0][1])
-
-    def test_exception(self):
-
-        self.mockClient.hget.side_effect = Exception()
-        test_key = sha256(''.join(sorted([TEST_PUBKEY1, TEST_PUBKEY2]))).hexdigest()
-
-        self.assertRaises(Exception, self.rr.get_invoicerequest_nonce, TEST_PUBKEY1, TEST_PUBKEY2)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-
-        self.assertEqual(1, self.mockClient.hget.call_count)
-        self.assertEqual(test_key, self.mockClient.hget.call_args[0][0])
-        self.assertEqual('nonce', self.mockClient.hget.call_args[0][1])
-
-class TestCleanupOldestNonces(AddressimoTestCase):
-
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-        self.patcher2 = patch('addressimo.resolvers.RedisResolver.datetime', wraps=datetime)
-
-        self.mockRedis = self.patcher1.start()
-        self.mockDatetime = self.patcher2.start()
-
-        self.mockClient = MagicMock()
-        self.mockClient.scan_iter.return_value = ['key1', 'key2']
-        self.mockClient.hget.side_effect = [10, 20]
-        self.mockRedis.from_url.return_value = self.mockClient
-
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        self.rr.cleanup_oldest_nonces()
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(2, self.mockDatetime.fromtimestamp.call_count)
-        self.assertEqual(1, self.mockClient.delete.call_count)
-        self.assertEqual(['key1', 'key2'], self.mockClient.delete.call_args[0][0])
-
-    def test_exception(self):
-
-        self.mockClient.delete.side_effect = Exception()
-
-        self.rr.cleanup_oldest_nonces()
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(2, self.mockDatetime.fromtimestamp.call_count)
-        self.assertEqual(1, self.mockClient.delete.call_count)
-        self.assertEqual(['key1', 'key2'], self.mockClient.delete.call_args[0][0])
-
-
-class TestCleanupStaleInvoiceRequestData(AddressimoTestCase):
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-        self.patcher2 = patch('addressimo.resolvers.RedisResolver.datetime', wraps=datetime)
-
-        self.mockRedis = self.patcher1.start()
-        self.mockDatetime = self.patcher2.start()
-
-        self.now = self.mockDatetime.utcnow.return_value = datetime.utcnow()
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-        # Setup test data
-        self.submit_id = 'endpoint_id'
-        self.ir_id = 'ir_id'
-
-        self.mockRedis.from_url.return_value.keys.return_value = ['1']
-        self.mockRedisData = {
-            'submit_date': (self.now - timedelta(days=config.ir_expiration_days + 1)).strftime('%s'),
-            'encrypted_payment_request': 'encPR'
+        # Setup Mock Redis Data
+        self.mockTxClient.scan_iter.return_value = ['tx_id1']
+        self.mockTxClient.hgetall.return_value = {
+            'last_updated': 'na',
+            'receiver': 'receiver_id'
         }
-        self.mockRedis.from_url.return_value.hgetall.return_value.values.return_value = [json.dumps(self.mockRedisData)]
 
-    def test_delete_one_key(self):
-
-        self.rr.cleanup_stale_invoicerequest_data()
-
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual('1', self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
-        self.assertEqual(1, self.mockRedis.from_url.return_value.delete.call_count)
-        self.assertEqual('1', self.mockRedis.from_url.return_value.delete.call_args[0][0])
-
-    def test_delete_two_keys(self):
-
-        # Setup test case
-        self.mockRedis.from_url.return_value.keys.return_value = ['1', '2']
-
-        self.rr.cleanup_stale_invoicerequest_data()
-
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(2, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual('1', self.mockRedis.from_url.return_value.hgetall.call_args_list[0][0][0])
-        self.assertEqual('2', self.mockRedis.from_url.return_value.hgetall.call_args_list[1][0][0])
-        self.assertEqual(2, self.mockRedis.from_url.return_value.delete.call_count)
-        self.assertEqual('1', self.mockRedis.from_url.return_value.delete.call_args_list[0][0][0])
-        self.assertEqual('2', self.mockRedis.from_url.return_value.delete.call_args_list[1][0][0])
-
-    def test_no_keys_to_delete(self):
-
-        # Setup test case
-        self.mockRedis.from_url.return_value.keys.return_value = []
-
-        self.rr.cleanup_stale_invoicerequest_data()
-
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(0, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual(0, self.mockRedis.from_url.return_value.delete.call_count)
-
-    def test_one_key_not_expired(self):
-
-        # Setup test case
-        self.mockRedisData['submit_date'] = self.now.strftime('%s')
-        self.mockRedis.from_url.return_value.hgetall.return_value.values.return_value = [json.dumps(self.mockRedisData)]
-
-        self.rr.cleanup_stale_invoicerequest_data()
-
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual(0, self.mockRedis.from_url.return_value.delete.call_count)
-
-    def test_exception_deleting_key(self):
-
-        # Setup test case
-        self.mockRedis.from_url.return_value.delete.side_effect = Exception('Delete failed')
-
-        self.rr.cleanup_stale_invoicerequest_data()
-
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.delete.call_count)
-
-class TestAddEncryptedPaymentRequest(AddressimoTestCase):
-
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-
-        self.mockRedis = self.patcher1.start()
-
-        self.mockRedis.from_url.return_value.set.return_value = 1
-        self.return_pr = {"id":"rpr_id"}
-
-        # Setup redis resolver
         self.rr = RedisResolver()
+        self.rr.tx_map_client = self.mockTxMapClient
+        self.rr.tx_client = self.mockTxClient
 
     def test_go_right(self):
 
-        result = self.rr.add_encrypted_paymentrequest(self.return_pr)
+        ret = self.rr.cleanup_stale_paymentprotocol_messages()
 
-        self.assertIsNone(result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('rpr_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "rpr_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
+        self.assertEqual(1, ret)
 
-    def test_set_returns_non_one(self):
+        self.assertEqual(1, self.mockTxClient.scan_iter.call_count)
+        self.assertEqual(1, self.mockTxClient.hgetall.call_count)
+        self.assertEqual('tx_id1', self.mockTxClient.hgetall.call_args[0][0])
 
-        self.mockRedis.from_url.return_value.set.return_value = 0
+        self.assertEqual(1, self.mockDatetime.utcfromtimestamp.call_count)
 
-        self.assertRaises(Exception, self.rr.add_encrypted_paymentrequest, self.return_pr)
+        self.assertEqual(1, self.mockTxClient.delete.call_count)
+        self.assertEqual('tx_id1', self.mockTxClient.delete.call_args[0][0])
 
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('rpr_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "rpr_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
+        self.assertEqual(1, self.mockTxMapClient.lrem.call_count)
+        self.assertEqual('receiver_id', self.mockTxMapClient.lrem.call_args[0][0])
+        self.assertEqual('tx_id1', self.mockTxMapClient.lrem.call_args[0][1])
 
-    def test_set_exception(self):
+    def test_tx_not_ready_for_deletion(self):
 
-        self.mockRedis.from_url.return_value.set.side_effect = Exception()
+        self.mockDatetime.utcfromtimestamp.return_value = datetime(year=2016, month=1, day=29)
 
-        self.assertRaises(Exception, self.rr.add_encrypted_paymentrequest, self.return_pr)
+        ret = self.rr.cleanup_stale_paymentprotocol_messages()
 
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('rpr_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "rpr_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
+        self.assertEqual(0, ret)
 
+        self.assertEqual(1, self.mockTxClient.scan_iter.call_count)
+        self.assertEqual(1, self.mockTxClient.hgetall.call_count)
+        self.assertEqual('tx_id1', self.mockTxClient.hgetall.call_args[0][0])
 
-class TestGetEncryptedPaymentRequest(AddressimoTestCase):
+        self.assertEqual(1, self.mockDatetime.utcfromtimestamp.call_count)
+
+        self.assertEqual(0, self.mockTxClient.delete.call_count)
+
+    def test_no_txs(self):
+
+        self.mockTxClient.scan_iter.return_value = []
+
+        ret = self.rr.cleanup_stale_paymentprotocol_messages()
+
+        self.assertEqual(0, self.mockTxClient.hgetall.call_count)
+        self.assertEqual(0, ret)
+
+class TestGetTxLastNonce(AddressimoTestCase):
 
     def setUp(self):
 
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
+        self.patcher1 = patch('addressimo.resolvers.RedisResolver.RedisResolver.get_paymentprotocol_messages')
+        self.patcher2 = patch('addressimo.resolvers.RedisResolver.Redis')
 
-        self.mockRedis = self.patcher1.start()
+        self.mockGetPaymentProtocolMessages = self.patcher1.start()
+        self.mockRedis = self.patcher2.start()
 
-        self.mockRedis.from_url.return_value.get.return_value = json.dumps({"id":"rpr_id"})
-        self.rpr_id = 'rpr_id'
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        result = self.rr.get_encrypted_paymentrequest(self.rpr_id)
-
-        self.assertIsNotNone(result)
-        self.assertIn('id', result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual('rpr_id', self.mockRedis.from_url.return_value.get.call_args[0][0])
-
-    def test_exception(self):
-
-        self.mockRedis.from_url.return_value.get.side_effect = Exception()
-
-        self.assertRaises(Exception, self.rr.get_encrypted_paymentrequest, self.rpr_id)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual('rpr_id', self.mockRedis.from_url.return_value.get.call_args[0][0])
-
-
-class TestCleanupStaleReturnPRData(AddressimoTestCase):
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-        self.patcher2 = patch('addressimo.resolvers.RedisResolver.datetime', wraps=datetime)
-
-        self.mockRedis = self.patcher1.start()
-        self.mockDatetime = self.patcher2.start()
-
-        self.now = self.mockDatetime.utcnow.return_value = datetime.utcnow()
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-        # Setup test data
-        self.submit_id = 'endpoint_id'
-        self.ir_id = 'ir_id'
-
-        self.mockRedis.from_url.return_value.keys.return_value = ['1']
-        self.mockRedisData = {
-            'submit_date': (self.now - timedelta(days=config.rpr_expiration_days + 1)).strftime('%s')
+        self.mockGetPaymentProtocolMessages.return_value = {
+            'tx_id1': {
+                'identifier': 'msg_identifier',
+                'last_nonce': 42
+            }
         }
-        self.mockRedis.from_url.return_value.get.return_value = json.dumps(self.mockRedisData)
 
-    def test_delete_one_key(self):
+        self.rr = RedisResolver()
 
-        self.rr.cleanup_stale_encrypted_paymentrequest_data()
+        self.message = ProtocolMessage()
+        self.message.identifier = 'msg_identifier'
 
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual('1', self.mockRedis.from_url.return_value.get.call_args[0][0])
-        self.assertEqual(1, self.mockRedis.from_url.return_value.delete.call_count)
-        self.assertEqual('1', self.mockRedis.from_url.return_value.delete.call_args[0][0])
+    def test_go_right(self):
 
-    def test_delete_two_keys(self):
+        ret = self.rr.get_tx_last_nonce(self.message, 'id', 'tx_id')
 
-        # Setup test case
-        self.mockRedis.from_url.return_value.keys.return_value = ['1', '2']
+        self.assertEqual(42, ret)
 
-        self.rr.cleanup_stale_encrypted_paymentrequest_data()
+        self.assertEqual(1, self.mockGetPaymentProtocolMessages.call_count)
+        self.assertEqual('id', self.mockGetPaymentProtocolMessages.call_args[0][0])
+        self.assertEqual('tx_id', self.mockGetPaymentProtocolMessages.call_args[0][1])
 
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(2, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual('1', self.mockRedis.from_url.return_value.get.call_args_list[0][0][0])
-        self.assertEqual('2', self.mockRedis.from_url.return_value.get.call_args_list[1][0][0])
-        self.assertEqual(2, self.mockRedis.from_url.return_value.delete.call_count)
-        self.assertEqual('1', self.mockRedis.from_url.return_value.delete.call_args_list[0][0][0])
-        self.assertEqual('2', self.mockRedis.from_url.return_value.delete.call_args_list[1][0][0])
+    def test_no_matching_id(self):
 
-    def test_no_keys_to_delete(self):
+        self.message.identifier = 'other_identifier'
 
-        # Setup test case
-        self.mockRedis.from_url.return_value.keys.return_value = []
+        ret = self.rr.get_tx_last_nonce(self.message, 'id', 'tx_id')
 
-        self.rr.cleanup_stale_encrypted_paymentrequest_data()
+        self.assertIsNone(ret)
 
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(0, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual(0, self.mockRedis.from_url.return_value.delete.call_count)
+        self.assertEqual(1, self.mockGetPaymentProtocolMessages.call_count)
+        self.assertEqual('id', self.mockGetPaymentProtocolMessages.call_args[0][0])
+        self.assertEqual('tx_id', self.mockGetPaymentProtocolMessages.call_args[0][1])
 
-    def test_one_key_not_expired(self):
+    def test_no_returned_tx_data(self):
 
-        # Setup test case
-        self.mockRedisData['submit_date'] = self.now.strftime('%s')
-        self.mockRedis.from_url.return_value.get.return_value = json.dumps(self.mockRedisData)
+        self.mockGetPaymentProtocolMessages.return_value = []
 
-        self.rr.cleanup_stale_encrypted_paymentrequest_data()
+        ret = self.rr.get_tx_last_nonce(self.message, 'id', 'tx_id')
 
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual(0, self.mockRedis.from_url.return_value.delete.call_count)
+        self.assertIsNone(ret)
 
-    def test_exception_deleting_key(self):
-
-        # Setup test case
-        self.mockRedis.from_url.return_value.delete.side_effect = Exception('Delete failed')
-
-        self.rr.cleanup_stale_encrypted_paymentrequest_data()
-
-        # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.delete.call_count)
-
+        self.assertEqual(1, self.mockGetPaymentProtocolMessages.call_count)
+        self.assertEqual('id', self.mockGetPaymentProtocolMessages.call_args[0][0])
+        self.assertEqual('tx_id', self.mockGetPaymentProtocolMessages.call_args[0][1])
 
 class TestGetPaymentRequestMetaData(AddressimoTestCase):
 
@@ -969,7 +788,7 @@ class TestGetPaymentRequestMetaData(AddressimoTestCase):
         ret_val = self.rr.get_payment_request_meta_data('uuid')
 
         self.assertDictEqual({'key': 'value'}, json.loads(ret_val))
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual('uuid', self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
 
@@ -978,15 +797,15 @@ class TestSetPaymentRequestMetaData(AddressimoTestCase):
 
     def setUp(self):
         self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-        self.patcher2 = patch('addressimo.resolvers.RedisResolver.uuid4')
         self.patcher3 = patch('addressimo.resolvers.RedisResolver.datetime')
+        self.patcher4 = patch('addressimo.resolvers.RedisResolver.RedisResolver.generate_unique_id')
 
         self.mockRedis = self.patcher1.start()
-        self.mockUUID = self.patcher2.start()
         self.mockDatetime = self.patcher3.start()
+        self.mockGenerateUniqueId = self.patcher4.start()
 
-        self.mockUUID.return_value.hex = 'abc123'
         self.mockRedis.from_url.return_value.hkeys.return_value = False
+        self.mockGenerateUniqueId.return_value = 'abc123abc123'
 
         self.now = self.mockDatetime.utcnow.return_value = datetime.utcnow()
 
@@ -1001,38 +820,11 @@ class TestSetPaymentRequestMetaData(AddressimoTestCase):
         self.assertEqual('abc123abc123', ret_val)
 
         # Validate call count
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hkeys.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hmset.call_count)
+        self.assertEqual(1, self.mockGenerateUniqueId.call_count)
 
         # Validate Redis call data
-        self.assertEqual('abc123abc123', self.mockRedis.from_url.return_value.hkeys.call_args[0][0])
-
-        self.assertEqual('abc123abc123', self.mockRedis.from_url.return_value.hmset.call_args[0][0])
-        self.assertDictEqual(
-            {'expiration_date': int(self.now.strftime('%s')), 'payment_validation_data': '%s' % json.dumps({'wallet_addr': 'amount'})},
-            self.mockRedis.from_url.return_value.hmset.call_args[0][1]
-        )
-
-    def test_go_right_two_iterations(self):
-
-        # Setup test case
-        self.mockRedis.from_url.return_value.hkeys.side_effect = [True, False]
-
-        ret_val = self.rr.set_payment_request_meta_data(int(self.now.strftime('%s')), 'wallet_addr', 'amount')
-
-        # Validate return data
-        self.assertEqual('abc123abc123', ret_val)
-
-        # Validate call count
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(2, self.mockRedis.from_url.return_value.hkeys.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hmset.call_count)
-
-        # Validate Redis call data
-        self.assertEqual('abc123abc123', self.mockRedis.from_url.return_value.hkeys.call_args_list[0][0][0])
-        self.assertEqual('abc123abc123', self.mockRedis.from_url.return_value.hkeys.call_args_list[1][0][0])
-
         self.assertEqual('abc123abc123', self.mockRedis.from_url.return_value.hmset.call_args[0][0])
         self.assertDictEqual(
             {'expiration_date': int(self.now.strftime('%s')), 'payment_validation_data': '%s' % json.dumps({'wallet_addr': 'amount'})},
@@ -1053,13 +845,10 @@ class TestSetPaymentRequestMetaData(AddressimoTestCase):
         )
 
         # Validate call count
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hkeys.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hmset.call_count)
 
         # Validate Redis call data
-        self.assertEqual('abc123abc123', self.mockRedis.from_url.return_value.hkeys.call_args[0][0])
-
         self.assertEqual('abc123abc123', self.mockRedis.from_url.return_value.hmset.call_args[0][0])
         self.assertDictEqual(
             {'expiration_date': int(self.now.strftime('%s')), 'payment_validation_data': '%s' % json.dumps({'wallet_addr': 'amount'})},
@@ -1090,7 +879,7 @@ class TestCleanupStalePaymentRequestMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_request_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual('1', self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
@@ -1105,7 +894,7 @@ class TestCleanupStalePaymentRequestMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_request_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(2, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual('1', self.mockRedis.from_url.return_value.hgetall.call_args_list[0][0][0])
@@ -1122,7 +911,7 @@ class TestCleanupStalePaymentRequestMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_request_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(0, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual(0, self.mockRedis.from_url.return_value.delete.call_count)
@@ -1136,7 +925,7 @@ class TestCleanupStalePaymentRequestMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_request_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual(0, self.mockRedis.from_url.return_value.delete.call_count)
@@ -1149,7 +938,7 @@ class TestCleanupStalePaymentRequestMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_request_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.delete.call_count)
@@ -1174,7 +963,7 @@ class TestSetPaymentMetaData(AddressimoTestCase):
         self.rr.set_payment_meta_data('tx_hash', 'memo', 'refund_address')
 
         # Validate call count
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hmset.call_count)
 
         # Validate Redis call data
@@ -1192,7 +981,7 @@ class TestSetPaymentMetaData(AddressimoTestCase):
         self.assertRaises(Exception, self.rr.set_payment_meta_data, 'tx_hash', 'memo', 'refund_address')
 
         # Validate call count
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hmset.call_count)
 
         # Validate Redis call data
@@ -1226,7 +1015,7 @@ class TestCleanupStalePaymentMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual('1', self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
@@ -1241,7 +1030,7 @@ class TestCleanupStalePaymentMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(2, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual('1', self.mockRedis.from_url.return_value.hgetall.call_args_list[0][0][0])
@@ -1258,7 +1047,7 @@ class TestCleanupStalePaymentMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(0, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual(0, self.mockRedis.from_url.return_value.delete.call_count)
@@ -1272,7 +1061,7 @@ class TestCleanupStalePaymentMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual(0, self.mockRedis.from_url.return_value.delete.call_count)
@@ -1285,197 +1074,7 @@ class TestCleanupStalePaymentMetaData(AddressimoTestCase):
         self.rr.cleanup_stale_payment_meta_data()
 
         # Validate calls and counts
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
+        self.assertEqual(3, self.mockRedis.from_url.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.keys.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
         self.assertEqual(1, self.mockRedis.from_url.return_value.delete.call_count)
-
-
-class TestGetRefundAddressFromTxHash(AddressimoTestCase):
-
-    def setUp(self):
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-
-        self.mockRedis = self.patcher1.start()
-
-        self.mockRedis.from_url.return_value.hgetall.return_value = {'key': 'value', 'expiration_date': 'thedate'}
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        ret_val = self.rr.get_refund_address_from_tx_hash('tx_hash')
-
-        # Validate Return value
-        self.assertDictEqual({'key': 'value'}, ret_val)
-
-        # Validate call count
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.hgetall.call_count)
-
-        # Validate Redis call data
-        self.assertEqual('tx_hash', self.mockRedis.from_url.return_value.hgetall.call_args[0][0])
-
-class TestAddEncryptedPayment(AddressimoTestCase):
-
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-
-        self.mockRedis = self.patcher1.start()
-
-        self.mockRedis.from_url.return_value.set.return_value = 1
-        self.return_pr = {"id":"ep_id"}
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        result = self.rr.add_encrypted_payment(self.return_pr)
-
-        self.assertIsNone(result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('payment_ep_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "ep_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
-
-    def test_set_returns_non_one(self):
-
-        self.mockRedis.from_url.return_value.set.return_value = 0
-
-        self.assertRaises(Exception, self.rr.add_encrypted_payment, self.return_pr)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('payment_ep_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "ep_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
-
-    def test_set_exception(self):
-
-        self.mockRedis.from_url.return_value.set.side_effect = Exception()
-
-        self.assertRaises(Exception, self.rr.add_encrypted_payment, self.return_pr)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('payment_ep_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "ep_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
-
-
-class TestGetEncryptedPayment(AddressimoTestCase):
-
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-
-        self.mockRedis = self.patcher1.start()
-
-        self.mockRedis.from_url.return_value.get.return_value = json.dumps({"id":"payment_ep_id"})
-        self.epr_id = 'ep_id'
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        result = self.rr.get_encrypted_payment(self.epr_id)
-
-        self.assertIsNotNone(result)
-        self.assertIn('id', result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual('payment_ep_id', self.mockRedis.from_url.return_value.get.call_args[0][0])
-
-    def test_exception(self):
-
-        self.mockRedis.from_url.return_value.get.side_effect = Exception()
-
-        self.assertRaises(Exception, self.rr.get_encrypted_payment, self.epr_id)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual('payment_ep_id', self.mockRedis.from_url.return_value.get.call_args[0][0])
-
-class TestAddEncryptedPaymentAck(AddressimoTestCase):
-
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-
-        self.mockRedis = self.patcher1.start()
-
-        self.mockRedis.from_url.return_value.set.return_value = 1
-        self.return_pr = {"id":"epa_id"}
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        result = self.rr.add_encrypted_paymentack(self.return_pr)
-
-        self.assertIsNone(result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('paymentack_epa_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "epa_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
-
-    def test_set_returns_non_one(self):
-
-        self.mockRedis.from_url.return_value.set.return_value = 0
-
-        self.assertRaises(Exception, self.rr.add_encrypted_paymentack, self.return_pr)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('paymentack_epa_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "epa_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
-
-    def test_set_exception(self):
-
-        self.mockRedis.from_url.return_value.set.side_effect = Exception()
-
-        self.assertRaises(Exception, self.rr.add_encrypted_paymentack, self.return_pr)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.set.call_count)
-        self.assertEqual('paymentack_epa_id', self.mockRedis.from_url.return_value.set.call_args[0][0])
-        self.assertEqual('{"id": "epa_id"}', self.mockRedis.from_url.return_value.set.call_args[0][1])
-
-
-class TestGetEncryptedPaymentAck(AddressimoTestCase):
-
-    def setUp(self):
-
-        self.patcher1 = patch('addressimo.resolvers.RedisResolver.Redis')
-
-        self.mockRedis = self.patcher1.start()
-
-        self.mockRedis.from_url.return_value.get.return_value = json.dumps({"id":"paymentack_epa_id"})
-        self.epa_id = 'epa_id'
-
-        # Setup redis resolver
-        self.rr = RedisResolver()
-
-    def test_go_right(self):
-
-        result = self.rr.get_encrypted_paymentack(self.epa_id)
-
-        self.assertIsNotNone(result)
-        self.assertIn('id', result)
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual('paymentack_epa_id', self.mockRedis.from_url.return_value.get.call_args[0][0])
-
-    def test_exception(self):
-
-        self.mockRedis.from_url.return_value.get.side_effect = Exception()
-
-        self.assertRaises(Exception, self.rr.get_encrypted_paymentack, self.epa_id)
-
-        self.assertEqual(1, self.mockRedis.from_url.call_count)
-        self.assertEqual(1, self.mockRedis.from_url.return_value.get.call_count)
-        self.assertEqual('paymentack_epa_id', self.mockRedis.from_url.return_value.get.call_args[0][0])
-

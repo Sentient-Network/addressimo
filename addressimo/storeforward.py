@@ -11,31 +11,37 @@ from functools import wraps
 
 log = LogUtil.setup_logging()
 
-def requires_public_key(f):
+def verify_public_key():
 
+    id = get_id()
+    if not id:
+        log.info('ID Unavailable from request: %s' % request.url)
+        return create_json_response(False, 'Unknown Endpoint', 404)
+
+    if not request.headers.get('x-identity'):
+        log.info('No Pubkey Exists in Request, Returning False [ID: %s]' % id)
+        return create_json_response(False, 'Missing x-identity header', 400)
+
+    resolver = PluginManager.get_plugin('RESOLVER', config.resolver_type)
+    id_obj = resolver.get_id_obj(id)
+    if not id_obj:
+        log.info('No Data Exists for Given ID, Failing [ID: %s]' % id)
+        return create_json_response(False, 'ID Not Recognized', 404)
+
+    if request.headers.get('x-identity') == id_obj.auth_public_key:
+        return None
+
+    return create_json_response(False, 'ID Not Recognized', 404)
+
+
+def requires_public_key(f):
     @wraps(f)
     def is_pubkey_for_id(*args, **kwargs):
 
-        id = get_id()
-        if not id:
-            log.info('ID Unavailable from request: %s' % request.url)
-            return create_json_response(False, 'Unknown Endpoint', 404)
-
-        if not request.headers.get('x-identity'):
-            log.info('No Pubkey Exists in Request, Returning False [ID: %s]' % id)
-            return create_json_response(False, 'Missing x-identity header', 400)
-
-        resolver = PluginManager.get_plugin('RESOLVER', config.resolver_type)
-        id_obj = resolver.get_id_obj(id)
-        if not id_obj:
-            log.info('No Data Exists for Given ID, Failing [ID: %s]' % id)
-            return create_json_response(False, 'ID Not Recognized', 404)
-
-        if request.headers.get('x-identity') == id_obj.auth_public_key:
-            return f(*args, **kwargs)
-
-        return create_json_response(False, 'ID Not Recognized', 404)
-
+        not_verified = verify_public_key()
+        if not_verified:
+            return not_verified
+        return f(*args, **kwargs)
     return is_pubkey_for_id
 
 class StoreForward:

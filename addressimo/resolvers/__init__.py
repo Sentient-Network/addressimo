@@ -37,7 +37,7 @@ def resolve(id):
         return create_json_response(False, 'Unable to retrieve id_obj from database', 404)
 
     # Handle InvoiceRequests
-    if id_obj.ir_only:
+    if id_obj.paymentprotocol_only:
         return create_json_response(False, 'Endpoint Requires a valid POST to create a PaymentRequest Request', 405, headers={'Allow': 'POST'})
 
     # Handle Store & Forward-Only Mode

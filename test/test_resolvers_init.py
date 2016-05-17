@@ -38,7 +38,7 @@ class TestResolve(AddressimoTestCase):
         self.mock_id_obj = Mock()
         self.mock_id_obj.presigned_payment_requests = []
         self.mock_id_obj.presigned_only = False
-        self.mock_id_obj.ir_only = False
+        self.mock_id_obj.paymentprotocol_only = False
         self.mockPluginManager.get_plugin.return_value.get_id_obj.return_value = self.mock_id_obj
 
         self.mockGetBip70Amount.return_value = 0
@@ -422,10 +422,10 @@ class TestResolve(AddressimoTestCase):
         self.assertEqual('Unable to retrieve id_obj from database', call_args[1])
         self.assertEqual(404, call_args[2])
 
-    def test_id_endpoint_ir_only(self):
+    def test_id_endpoint_paymentprotocol_only(self):
 
         # Setup test case
-        self.mock_id_obj.ir_only = True
+        self.mock_id_obj.paymentprotocol_only = True
 
         resolve('id')
 

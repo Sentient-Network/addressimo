@@ -25,33 +25,22 @@ class BaseResolver(BasePlugin):
     def delete(self, id_obj):
         raise NotImplementedError
 
-    # InvoiceRequest Data Handling
-    def add_invoicerequest(self, id, ir_data):
+    ##################################
+    # Payment Protocol Data Handling
+    ##################################
+    def get_paymentprotocol_messages(self, id=None, tx_id=None):
         raise NotImplementedError
 
-    def get_invoicerequests(self, id):
+    def add_paymentprotocol_message(self, message, id=None, tx_id=None):
         raise NotImplementedError
 
-    def delete_invoicerequest(self, id, ir_id):
+    def delete_paymentprotocol_message(self, tx_identifier, type, id=None, tx_id=None):
         raise NotImplementedError
 
-    def set_invoicerequest_nonce(self, pubkey1, pubkey2, nonce):
+    def cleanup_stale_paymentprotocol_messages(self):
         raise NotImplementedError
 
-    def get_invoicerequest_nonce(self, pubkey1, pubkey2):
-        raise NotImplementedError
-
-    def cleanup_stale_invoicerequest_data(self):
-        raise NotImplementedError
-
-    # EncryptedPaymentRequest (EPR) Data Handling
-    def add_encrypted_paymentrequest(self, encrypted_paymentrequest):
-        raise NotImplementedError
-
-    def get_encrypted_paymentrequest(self, id):
-        raise NotImplementedError
-
-    def cleanup_stale_encrypted_paymentrequest_data(self):
+    def get_tx_last_nonce(self, message, id=None, tx_id=None):
         raise NotImplementedError
 
     # Payment Data Handling
@@ -71,19 +60,6 @@ class BaseResolver(BasePlugin):
         raise NotImplementedError
 
     def get_refund_address_from_tx_hash(self, tx_hash):
-        raise NotImplementedError
-
-    # EncryptedPayment / EncryptedPaymentAck
-    def add_encrypted_payment(self, encrypted_payment):
-        raise NotImplementedError
-
-    def get_encrypted_payment(self, id):
-        raise NotImplementedError
-
-    def add_encrypted_paymentack(self, encrypted_payment_ack):
-        raise NotImplementedError
-
-    def get_encrypted_paymentack(self, id):
         raise NotImplementedError
 
     @classmethod

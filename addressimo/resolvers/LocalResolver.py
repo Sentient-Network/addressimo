@@ -50,7 +50,7 @@ IGV2aWwsIGluIHRoZSBzdXBlcmxhdGl2ZSBkZWdyZWUgb2YgY29tcGFyaXNvbiBvbmx5Lg=="""
             'bip32_enabled': True,
             'master_public_key': 'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8',
             'bip70_enabled': True,
-            'ir_only': False,
+            'paymentprotocol_only': False,
             'bip70_static_amount': 424242,
             'private_key_location': 'HSM1',
             'private_key_id': 'privKey1234',

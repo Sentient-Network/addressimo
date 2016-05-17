@@ -2,6 +2,7 @@ __author__ = 'Matt David'
 
 import json
 import time
+from base64 import b64decode, b64encode
 from datetime import datetime, timedelta
 from hashlib import sha256
 from time import mktime
@@ -12,14 +13,31 @@ from BaseResolver import BaseResolver
 from addressimo.config import config
 from addressimo.data import IdObject
 from addressimo.util import LogUtil, CustomJSONEncoder
+from addressimo.paymentprotocol.paymentrequest_pb2 import ProtocolMessage, EncryptedProtocolMessage, ProtocolMessageType
 
 log = LogUtil.setup_logging()
 
-class RedisResolver(BaseResolver):
 
+class RedisResolver(BaseResolver):
     @classmethod
     def get_plugin_name(cls):
         return 'REDIS'
+
+    @classmethod
+    def generate_unique_id(cls, redis_conn, uuid_multiple=1):
+        while True:
+            id = ''.join([uuid4().hex for _ in range(uuid_multiple)])
+            try:
+                if not redis_conn.exists(id):
+                    return id
+            except:
+                log.warn("Unable to Generate New, Unused ID [REDIS: %s]" % redis_conn.info())
+                return None
+
+    def __init__(self):
+
+        self.tx_client = Redis.from_url(config.redis_tx_uri)
+        self.tx_map_client = Redis.from_url(config.redis_tx_map_uri)
 
     def get_all_keys(self):
         redis_client = Redis.from_url(config.redis_id_obj_uri)
@@ -88,12 +106,8 @@ class RedisResolver(BaseResolver):
     def save(self, id_obj):
 
         redis_client = Redis.from_url(config.redis_id_obj_uri)
-
         if not id_obj.id:
-            temp_id = uuid4().hex
-            while redis_client.get(temp_id):
-                temp_id = uuid4().hex
-            id_obj.id = temp_id
+            id_obj.id = RedisResolver.generate_unique_id(redis_client, 1)
 
         try:
             result = redis_client.set(id_obj.id, json.dumps(id_obj, cls=CustomJSONEncoder))
@@ -115,165 +129,146 @@ class RedisResolver(BaseResolver):
             log.info('Unable to Delete IdObject to Redis [ID: %s]: %s' % (id_obj.id, str(e)))
             raise
 
-    # InvoiceRequest (IR) Data Handling
-    def add_invoicerequest(self, id, ir_data):
+    #########################################
+    # Payment Protocol Data Handling
+    #########################################
+    def get_paymentprotocol_messages(self, id=None, tx_id=None):
 
-        redis_client = Redis.from_url(config.redis_ir_queue)
+        txs_data = {}
+        tx_ids = [tx_id]
+        if id:
+            tx_count = self.tx_map_client.llen(id)
+            if not tx_count:
+                return txs_data
 
-        if 'id' not in ir_data:
-            while True:
-                ir_data['id'] = "%s%s%s" % (uuid4().hex, uuid4().hex, uuid4().hex)
+            tx_ids = self.tx_map_client.lrange(id, 0, tx_count-1)
+
+        for transaction_id in tx_ids:
+            tx = self.tx_client.hgetall(transaction_id)
+            if not tx:
+                continue
+
+            decoded_messages = [b64decode(x) for x in json.loads(tx.get('messages', '[]'))]
+            tx['messages'] = decoded_messages
+            txs_data[transaction_id] = tx
+
+        return txs_data
+
+    def add_paymentprotocol_message(self, message, id=None, tx_id=None):
+
+        possible_tx_ids = [tx_id]
+        if id:
+            possible_tx_id_count = self.tx_map_client.llen(id)
+            possible_tx_ids = self.tx_map_client.lrange(id, 0, possible_tx_id_count - 1)
+
+        found_tx = found_tx_id = None
+        for possible_tx_id in possible_tx_ids:
+            if message.identifier == self.tx_client.hget(possible_tx_id, 'identifier'):
+                found_tx = self.tx_client.hgetall(possible_tx_id)
+                found_tx_id = possible_tx_id
+                break
+
+        # Create New TX
+        if not found_tx and id and message.message_type == ProtocolMessageType.Value('INVOICE_REQUEST'):
+            new_data = {
+                'messages': json.dumps([b64encode(message.SerializeToString())]),
+                'receiver': id,
+                'identifier': message.identifier,
+                'last_updated': datetime.utcnow().strftime('%s'),
+            }
+            if isinstance(message, EncryptedProtocolMessage):
+                new_data['last_nonce'] = message.nonce
+
+            new_id = RedisResolver.generate_unique_id(self.tx_client, 3)
+            self.tx_client.hmset(new_id, new_data)
+            self.tx_map_client.rpush(id, new_id)
+            return new_id
+        elif not found_tx:
+            return None
+
+        found_tx['messages'] = json.loads(found_tx['messages'])
+        found_tx['messages'].append(b64encode(message.SerializeToString()))
+        found_tx['messages'] = json.dumps(found_tx['messages'])
+        found_tx['last_updated'] = datetime.utcnow().strftime('%s')
+
+        if isinstance(message, EncryptedProtocolMessage):
+            found_tx['last_nonce'] = message.nonce
+
+        self.tx_client.hmset(found_tx_id, found_tx)
+        return found_tx_id
+
+    def delete_paymentprotocol_message(self, tx_identifier, type, id=None, tx_id=None):
+
+        messages = self.get_paymentprotocol_messages(id, tx_id)
+
+        for tx_id, msg in messages.iteritems():
+
+            msg_updated = False
+            for pp_message in msg.get('messages', []):
+
                 try:
-                    if not redis_client.exists(ir_data['id']):
-                        break
+                    protobuf_message = EncryptedProtocolMessage()
+                    protobuf_message.ParseFromString(pp_message)
+                    protobuf_message.SerializeToString() # Verify this is an EncryptedProtocolMessage
                 except:
-                    log.warn("Unable to Validate New ID for InvoiceRequest")
-                    raise
+                    try:
+                        protobuf_message = ProtocolMessage()
+                        protobuf_message.ParseFromString(pp_message)
+                        protobuf_message.SerializeToString() # Verify this is an ProtocolMessage
+                    except:
+                        log.error('Unable to Parse Protobuf Message [ID: %s | TX_ID: %s]' % (id, tx_id))
+                        continue
 
-        try:
-            result = redis_client.hset(id, ir_data['id'], json.dumps(ir_data, cls=CustomJSONEncoder))
-            if result != 1:
-                return None
+                if type.upper() == ProtocolMessageType.Name(protobuf_message.message_type) and tx_identifier == protobuf_message.identifier:
+                    msg['messages'] = [x for x in msg.get('messages', []) if x != pp_message]
+                    msg_updated = True
+                    break
 
-            log.info('Added InvoiceRequest to Queue %s' % id)
-            return ir_data
-        except Exception as e:
-            log.info('Unable to Add InvoiceRequest to Queue %s: %s' % (id, str(e)))
-            raise
+            if not msg_updated:
+                continue
 
-    def get_invoicerequests(self, id, ir_id=None):
-
-        redis_client = Redis.from_url(config.redis_ir_queue)
-
-        try:
-            if ir_id:
-                result = redis_client.hget(id, ir_id)
-                return json.loads(result) if result else None
+            if not msg.get('messages', []):
+                self.tx_client.delete(tx_id)
+                receiver_id = id if id else msg.get('receiver', '')
+                self.tx_map_client.lrem(receiver_id, tx_id, 0)
             else:
-                result = redis_client.hgetall(id)
-                return [json.loads(x) for x in result.values()]
-        except Exception as e:
-            log.info('Unable to Get InvoiceRequests from Queue %s: %s' % (id, str(e)))
-            raise
+                msg['messages'] = json.dumps([b64encode(x) for x in msg.get('messages', [])])
+                self.tx_client.hmset(tx_id, msg)
 
-    def delete_invoicerequest(self, id, ir_id):
+            return True
 
-        redis_client = Redis.from_url(config.redis_ir_queue)
+        return False
 
-        try:
-            result = redis_client.hdel(id, ir_id)
-            return True if result > 0 else False
-        except Exception as e:
-            log.info('Unable to Delete InvoiceRequest from Queue %s: %s' % (id, str(e)))
-            raise
+    def cleanup_stale_paymentprotocol_messages(self):
 
-    def set_invoicerequest_nonce(self, pubkey1, pubkey2, nonce):
+        delete_count = 0
 
-        redis_client = Redis.from_url(config.redis_ir_nonce_uri)
+        for tx_id in self.tx_client.scan_iter():
+            tx = self.tx_client.hgetall(tx_id)
+            last_updated = datetime.utcfromtimestamp(tx.get('last_updated', ''))
+            if last_updated > datetime.utcnow() - timedelta(days=config.paymentprotocol_message_expiration_days):
+                continue
 
-        nonce_key = sha256(''.join(sorted([pubkey1, pubkey2]))).hexdigest()
+            # Delete the TX
+            delete_count += 1
+            self.tx_client.delete(tx_id)
 
-        # Clear old nonces if the dbsize is too big
-        dbsize = redis_client.dbsize()
-        if dbsize > config.ir_nonce_db_maxkeys:
-            log.info('Calling Old Nonce Cleanup, DBSize is Greater Than Configured MaxKeys')
-            self.cleanup_oldest_nonces()
+            # Delete TX ID from TX Receiver Map
+            self.tx_map_client.lrem(tx.get('receiver'), tx_id)
 
-        try:
-            result = redis_client.hmset(nonce_key, {'nonce': nonce, 'updated': int(time.time())})
-            return result
-        except Exception as e:
-            log.info('Unable to Set IR Nonce: %s' % str(e))
-            raise
+        return delete_count
 
-    def get_invoicerequest_nonce(self, pubkey1, pubkey2):
+    def get_tx_last_nonce(self, message, id=None, tx_id=None):
 
-        redis_client = Redis.from_url(config.redis_ir_nonce_uri)
+        txs_data = self.get_paymentprotocol_messages(id, tx_id)
+        if not txs_data:
+            return None
 
-        nonce_key = sha256(''.join(sorted([pubkey1, pubkey2]))).hexdigest()
+        for tx_id, data in txs_data.items():
+            if message.identifier == data['identifier']:
+                return int(data.get('last_nonce'))
 
-        try:
-            result = redis_client.hget(nonce_key, 'nonce')
-            return result
-        except Exception as e:
-            log.info('Unable to Retrieve IR Nonce: %s' % str(e))
-            raise
-
-    def cleanup_oldest_nonces(self):
-
-        oldest = []
-        log.info('Scanning to Remove Old Nonces [MAX: %s]' % config.old_nonce_cleanup_size)
-
-        redis_client = Redis.from_url(config.redis_ir_nonce_uri)
-        try:
-            for hkey in redis_client.scan_iter():
-                updated = datetime.fromtimestamp(redis_client.hget(hkey, 'updated'))
-                oldest.append({'key': hkey, 'updated': updated})
-                oldest = sorted(oldest, key=lambda k: k['updated'])[:config.old_nonce_cleanup_size]
-
-            log.info('Removing %d oldest nonces' % len(oldest))
-            redis_client.delete([x.get('key') for x in oldest])
-        except Exception as e:
-            # This is not a fatal error as we will retry the cleanup later
-            log.warn("Unknown Exception Caught During Old Nonce Cleanup: %s" % str(e))
-            return
-
-    def cleanup_stale_invoicerequest_data(self):
-
-        redis_client = Redis.from_url(config.redis_ir_queue)
-
-        ir_keys = redis_client.keys()
-        log.info('Found %d InvoiceRequest Keys' % len(ir_keys))
-
-        for key in ir_keys:
-            try:
-                prr = json.loads(redis_client.hgetall(key).values()[0])
-
-                if datetime.fromtimestamp(int(prr.get('submit_date'))) + timedelta(days=config.ir_expiration_days) < datetime.utcnow():
-                    log.info('Deleting Stale InvoiceRequest [ID: %s]' % key)
-                    redis_client.delete(key)
-            except Exception as e:
-                log.error('Exception Occurred Cleaning Up Stale InvoiceRequest [ID: %s]: %s' % (key, str(e)))
-
-    # EncrpytedPaymentRequest (EPR) Data Handling
-    def add_encrypted_paymentrequest(self, encrypted_paymentrequest):
-
-        redis_client = Redis.from_url(config.redis_epr_data)
-
-        try:
-            result = redis_client.set(encrypted_paymentrequest['id'], json.dumps(encrypted_paymentrequest, cls=CustomJSONEncoder))
-            if result != 1:
-                raise Exception('Redis Set Command Failed')
-        except Exception as e:
-            log.info('Unable to Add EncryptedPaymentRequest %s: %s' % (encrypted_paymentrequest['id'], str(e)))
-            raise
-
-    def get_encrypted_paymentrequest(self, id):
-
-        redis_client = Redis.from_url(config.redis_epr_data)
-
-        try:
-            return json.loads(redis_client.get(id))
-        except Exception as e:
-            log.info('Unable to Get EncryptedPaymentRequest %s: %s' % (id, str(e)))
-            raise
-
-    def cleanup_stale_encrypted_paymentrequest_data(self):
-
-        redis_client = Redis.from_url(config.redis_epr_data)
-
-        return_pr_keys = redis_client.keys()
-        log.info('Found %d EncryptedPaymentRequest Keys' % len(return_pr_keys))
-
-        for key in return_pr_keys:
-            try:
-                return_pr = json.loads(redis_client.get(key))
-
-                if datetime.fromtimestamp(int(return_pr.get('submit_date'))) + timedelta(days=config.rpr_expiration_days) < datetime.utcnow():
-                    log.info('Deleting Stale EncryptedPaymentRequest [ID: %s]' % key)
-                    redis_client.delete(key)
-            except Exception as e:
-                log.error('Exception Occurred Cleaning Up Stale EncryptedPaymentRequest [ID: %s]: %s' % (key, str(e)))
+        return None
 
     # Payment Data Handling
     def get_payment_request_meta_data(self, uuid):
@@ -285,12 +280,7 @@ class RedisResolver(BaseResolver):
     def set_payment_request_meta_data(self, expiration_date, wallet_addr, amount):
 
         redis_client = Redis.from_url(config.redis_pr_store)
-
-        # Only continue if uuid doesn't already exist in Redis
-        while True:
-            payment_url_uuid = '%s%s' % (uuid4().hex, uuid4().hex)
-            if not redis_client.hkeys(payment_url_uuid):
-                break
+        payment_url_uuid = RedisResolver.generate_unique_id(redis_client, 2)
 
         payment_addresses = {
             wallet_addr: amount
@@ -356,56 +346,3 @@ class RedisResolver(BaseResolver):
                     redis_client.delete(key)
             except Exception as e:
                 log.error('Exception Occurred Cleaning Up Stale Payment Meta Data [UUID: %s]: %s' % (key, str(e)))
-
-    def get_refund_address_from_tx_hash(self, tx_hash):
-
-        redis_client = Redis.from_url(config.redis_payment_store)
-
-        result = redis_client.hgetall(tx_hash)
-        del(result['expiration_date'])
-
-        return result
-
-    def add_encrypted_payment(self, encrypted_payment):
-
-        redis_client = Redis.from_url(config.redis_epr_data)
-
-        try:
-            result = redis_client.set('payment_%s' % encrypted_payment['id'], json.dumps(encrypted_payment, cls=CustomJSONEncoder))
-            if result != 1:
-                raise Exception('Redis Set Command Failed')
-        except Exception as e:
-            log.info('Unable to Add EncryptedPayment %s: %s' % (encrypted_payment['id'], str(e)))
-            raise
-
-    def get_encrypted_payment(self, id):
-
-        redis_client = Redis.from_url(config.redis_epr_data)
-
-        try:
-            return json.loads(redis_client.get('payment_%s' % id))
-        except Exception as e:
-            log.info('Unable to Get EncryptedPaymentRequest %s: %s' % (id, str(e)))
-            raise
-
-    def add_encrypted_paymentack(self, encrypted_payment_ack):
-
-        redis_client = Redis.from_url(config.redis_epr_data)
-
-        try:
-            result = redis_client.set('paymentack_%s' % encrypted_payment_ack['id'], json.dumps(encrypted_payment_ack, cls=CustomJSONEncoder))
-            if result != 1:
-                raise Exception('Redis Set Command Failed')
-        except Exception as e:
-            log.info('Unable to Add EncryptedPaymentAck %s: %s' % (encrypted_payment_ack['id'], str(e)))
-            raise
-
-    def get_encrypted_paymentack(self, id):
-
-        redis_client = Redis.from_url(config.redis_epr_data)
-
-        try:
-            return json.loads(redis_client.get('paymentack_%s' % id))
-        except Exception as e:
-            log.info('Unable to Get EncryptedPaymentAck %s: %s' % (id, str(e)))
-            raise

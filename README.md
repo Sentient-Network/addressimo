@@ -76,7 +76,7 @@ configuration, the resolution endpoint (GET) can return:
 2. A PaymentRequest if the URL's bip70 query parameter is set to true
 
 With **BIP75 support**, *Addressimo* supports Store & Forward address resolution services. For BIP75-enabled address 
-resolution endpoints, *Addressimo* accepts both *InvoiceRequests* and *EncryptedInvoiceRequests*.
+resolution endpoints, *Addressimo* accepts *InvoiceRequests* in both *ProtocolMessages* and *EncryptedProtocolMessages*
 
 <a name="fullflow-anchor"/>
 ## Full PaymentRequest, Payment, and PaymentACK Processing
@@ -261,7 +261,7 @@ The response type can be determined by looking at the Content-Type in the API re
     
             {
                 "success": false,
-                "message": "Endpoint Requires a valid POST to create a PasymentRequest Request"
+                "message": "Endpoint Requires a valid InvoiceRequest POST to begin the BIP75 Payment Protocol process"
             }
         
 + Response 500 (application/json)
@@ -289,7 +289,7 @@ signed by the x509 certificate's private key. In this case, the process of signi
 
     - id (required, string, `f282ad27e92f4e518a0738dd99469470`) ... Address Resolution ID
 
-+ Request (application/bitcoin-invoicerequest)
++ Request (application/bitcoin-paymentprotocol-message)
 
     + Headers
 
@@ -299,9 +299,9 @@ signed by the x509 certificate's private key. In this case, the process of signi
             
     + Body
 
-            Serialized InvoiceRequest
+            Serialized ProtocolMessage containing InvoiceRequest
             
-+ Request (application/bitcoin-encrypted-invoicerequest)
++ Request (application/bitcoin-encrypted-paymentprotocol-message)
 
     + Headers
     
@@ -311,13 +311,13 @@ signed by the x509 certificate's private key. In this case, the process of signi
 
     + Body
     
-            Serialized EncryptedInvoiceRequest
+            Serialized EncryptedProtocolMessage containing InvoiceRequest
         
 + Response 202
 
     + Headers
         
-            Location: "https://site_url/encryptedpaymentrequest/longUuid_payment_id"
+            Location: "https://site_url/paymentprotocol/longUuid_payment_id"
     
 + Response 400 (application/json)
 
@@ -461,38 +461,9 @@ The "id" returned in the POST call will need to be used for any further access t
             "message": "Invalid Identifier"
         }
         
-## Retrieve Refund Outputs [/payment/{id}/refund/{tx}]
-### Retrieve Refund Outputs [GET /payment/{id}/refund/{tx}]
-
-+ Parameters
-
-   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Address Resolution ID
-   + tx (required, string, `d69cb176808acb4cee2a31fac98b29550ad82dcc21b144dc5704c891bc22ded4`) ... TX HASH
-
-+ Request (application/bitcoin-payment)
-
-   + Headers
-
-            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
-            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
-   
-+ Response 200 (application/bitcoin-paymentack)
-
-        {
-           "success": true,
-           "message": "",
-           "memo": "Payment memo",
-           "refund_to": "['76a914819d3b204b99f252da2ef21293c621e75dd1444f88ac']"
-        }
-       
-+ Response 404 (application/json)
-
-        {
-           "success": false,
-           "message": "Refund Output Not Found For Submitted TX."
-        }
 
 ## Time Endpoint [/time]
+
 ### Get Server Time [GET /time]
 + Request (application/json)
 
@@ -504,13 +475,19 @@ The "id" returned in the POST call will need to be used for any further access t
             "utime": 1452797108831686
         }
 
-## InvoiceRequests [/address/{id}/invoicerequests]
+## Payment Protocol Store and Forward Endpoint [/address/{id}/paymentprotocol]
 
 **NOTE:** Some endpoints **[REQUIRE AUTHENTICATION](#auth-anchor)**
 
-### Retrieve InvoiceRequests [GET]
+This endpoint supports the full BIP 75 implementation. All ProtocolMessage and EncryptedProtocolMessage messages require use of the identifier field to uniquely identify the transaction. Additionally, the signature field is required by *Addressimo*.
 
-Retrieve queued InvoiceRequests / EncryptedInvoiceRequests for the given endpoint.
+### Retrieve Payment Protocol Messages [GET]
+
+Retrieve stored Payment Protocol messages for the given endpoint.
+
++ Parameters
+
+    - id (required, string, `5935d444b6214296887f4c88e66f5628`) ... Store and Forward Endpoint ID
    
 + Request (application/json)
 
@@ -524,17 +501,13 @@ Retrieve queued InvoiceRequests / EncryptedInvoiceRequests for the given endpoin
         {
             "success": true,
             "message": "",
-            "count": 2,
-            "requests": [
-                {
-                    "id": "longUuid",
-                    "invoice_request": HEX ENCODED, SERIALIZED InvoiceRequest
-                    "submit_date": 1439944603
-                }, 
-                {
-                    "id": "longUuid2",
-                    "encrypted_invoice_request": HEX ENCODED, SERIALIZED EncryptedInvoiceRequest,
-                    "submit_date": 1439944603
+            "count": 3,
+            "protocol_messages": [
+                HEX ENCODED, SERIALIZED ProtocolMessage
+            ],
+            "encrypted_protocol_messages": [
+                HEX ENCODED, SERIALIZED EncryptedProtocolMessage,
+                HEX ENCODED, SERIALIZED EncryptedProtocolMessage
             ]
         }
         
@@ -549,72 +522,50 @@ Retrieve queued InvoiceRequests / EncryptedInvoiceRequests for the given endpoin
 
         {
             "success": false,
-            "message": "Unable to Retrieve Queued InvoiceRequests"
+            "message": "Exception Occurred, Please Try Again Later."
         }
 
-### Submit EncryptedPaymentRequest [POST]
+### Submit Payment Protocol Message [POST]
+Submit Payment Protocol messages (ProtocolMessage / EncryptedProtocolMessage) to a given endpoint. Per BIP75, error communication is handled completely within the Protocol Messages using status_code and status_message to comunicate the error.
 
-Submit EncryptedPaymentRequest messages and/or errors to be held until they are retrieved.
++ Parameters
 
-+ Request (application/json)
+    - id (required, string, `5935d444b6214296887f4c88e66f5628`) ... Store and Forward Endpoint ID
+
++ Request (application/bitcoin-paymentprotocol-message)
 
     + Headers
 
             X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
             X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
-            
+            Content-Transfer-Encoding: "binary"
     + Body
 
-            {
-                "ready_requests": [
-                    {
-                        "id": "longUuid",
-                        "encrypted_payment_request": "HEX ENCODED, SERIALIZED EncryptedPaymentRequest"
-                    }
-                ],
-                "failed_requests": [
-                    {
-                        "id": "longUuid2",
-                        "error_code": 406
-                        "error_message": "Amount not possible"
-                    }
-                ]
-            }
+            Serialized ProtocolMessage
 
++ Request (application/bitcoin-encrypted-paymentprotocol-message)
+
+    + Headers
+
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
+            Content-Transfer-Encoding: "binary"
+    + Body
+
+            Serialized EncryptedProtocolMessage
 
 + Response 200 (application/json)
 
         {
             "success": true,
-            "message": "",
-            "ready_accept_count": 1,
-            "failed_accept_count": 1
+            "message": "Payment Protocol message accepted"
         }
-        
-+ Response 400 (application/json)
-
-        {
-            "success": "false",
-            "message": "Submitted EncryptedPaymentRequests contain errors, please see failures field for more information",
-            "ready_accept_count": 0,
-            "failed_accept_count": 1,
-            "failures": {
-                "longUuid": "Missing Required Fields"
-            }
-        }
-        
+               
 + Response 400 (application/json)
 
         {
             "success": "false",
             "message", "Invalid Request"
-        }
-        
-+ Response 404 (application/json)
-
-        {
-            "success": "false",
-            "message", "Invalid Identifier"
         }
         
 + Response 500 (application/json)
@@ -624,274 +575,148 @@ Submit EncryptedPaymentRequest messages and/or errors to be held until they are 
             "message": "error_message"
         }
 
-### EncryptedPaymentRequest Retrieval [GET /encryptedpaymentrequest/{id}]
+### Delete Payment Protocol Message [DELETE /address/{id}/paymentprotocol/{identifier}/{messagetype}]
 
-Retrieve a EncryptedPaymentRequest message by ID.
-
-A successful 200 response contains an EncryptedPaymentRequest that can only decrypted by the original requestor.
-
-**NOTE:** HTTP Status Codes 404 and 500 are retryable as denoted by the Retry-After header. Other 400 status codes are
-final as the result of the InvoiceRequest has generated an error with the Receiver.
+Delete Payment Protocol messages (ProtocolMessage / EncryptedProtocolMessage) from a given endpoint based on transaction identifier and message type.
 
 + Parameters
 
-    - id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... EPR ID
-    
-+ Response 200 (application/bitcoin-encrypted-paymentrequest)
+    - id (required, string, `5935d444b6214296887f4c88e66f5628`) ... Store and Forward Endpoint ID
+    - identifier (required, string, `6d73675f6964656e746966696572`) ... Hex-Encoded Payment Protocol transaction identifier
+    - messagetype (required, string, `invoice_request`) ... Any of the values of ProtocolMessageType `(ie., invoice_request, payment_request, payment, payment_ack)`
+
++ Request (application/json)
 
     + Headers
-    
-            Content-Transfer-Encoding: binary
-    
+
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
+            Content-Transfer-Encoding: "binary"
     + Body
+
++ Response 204
         
-            BINARY, SERIALIZED EncryptedPaymentRequest
+    
+    
+## Payment Protocol Transaction Endpoint [/paymentprotocol/{tx_id}]
+
+**NOTE:** Some endpoints **[REQUIRE AUTHENTICATION](#auth-anchor)**
+
+This endpoint supports the full BIP 75 implementation. All ProtocolMessage and EncryptedProtocolMessage messages require use of the identifier field to uniquely identify the transaction. Additionally, the signature field is required by *Addressimo*.
+
+### Retrieve Payment Protocol Messages [GET]
+
+Retrieve stored Payment Protocol messages for the transaction.
+
++ Parameters
+
+    - tx_id (required, string, `5935d444b6214296887f4c88e66f56285935d444b6214296887f4c88e66f56285935d444b6214296887f4c88e66f5628`) ... Store and Forward BIP75 Transaction ID
+   
++ Request (application/json)
+
+    + Headers
+
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
+
++ Response 200 (application/json)
+
+        {
+            "success": true,
+            "message": "",
+            "count": 3,
+            "protocol_messages": [
+                HEX ENCODED, SERIALIZED ProtocolMessage
+            ],
+            "encrypted_protocol_messages": [
+                HEX ENCODED, SERIALIZED EncryptedProtocolMessage,
+                HEX ENCODED, SERIALIZED EncryptedProtocolMessage
+            ]
+        }
         
 + Response 404 (application/json)
-
-    + Headers
-    
-            Retry-After: 120
-            
-    + Body
-
-            {
-                "success": false,
-                "message": "PaymentRequest Not Found or Not Yet Ready"
-            }
-        
-+ Response 406 (application/json)
 
         {
             "success": false,
-            "message": "Amount not possible"
+            "message": "Invalid Identifier"
         }
         
 + Response 500 (application/json)
 
-    + Headers
-    
-            Retry-After: 120
-            
-    + Body
+        {
+            "success": false,
+            "message": "Exception Occurred, Please Try Again Later."
+        }
 
-            {
-                "success": false,
-                "message": "PaymentRequest Not Found"
-            }
-        
-## Payment Handling [/payment]
+### Submit Payment Protocol Message [POST]
 
-### Submit Payment Message [POST /payment/{id}]
-
-Submit either a Payment or an EncryptedPayment in response to an EncryptedPaymentRequest. 
-
-A request submitting a non-encrypted Payment message will return a PaymentACK in the go right case. A request 
-submitting an encrypted Payment message will return JSON data denoting that the message has been accepted in 
-the go right case.
+Submit Payment Protocol messages (ProtocolMessage / EncryptedProtocolMessage) for a given transaction. Per BIP75, error communication is handled completely within the Protocol Messages using status_code and status_message to comunicate the error.
 
 + Parameters
 
-   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment ID
+    - tx_id (required, string, `5935d444b6214296887f4c88e66f56285935d444b6214296887f4c88e66f56285935d444b6214296887f4c88e66f5628`) ... Store and Forward BIP75 Transaction ID
 
-+ Request (application/bitcoin-payment)
++ Request (application/bitcoin-paymentprotocol-message)
 
-   + Headers
+    + Headers
 
-            Accept: application/bitcoin-paymentack, application/json
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
             Content-Transfer-Encoding: "binary"
-           
-   + Body
+    + Body
 
-            BINARY, SERIALIZED PROTOBUF Payment
-            
-+ Request (application/bitcoin-encrypted-payment)
+            Serialized ProtocolMessage
 
-   + Headers
++ Request (application/bitcoin-encrypted-paymentprotocol-message)
 
-            Accept: application/json
+    + Headers
+
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
             Content-Transfer-Encoding: "binary"
-           
-   + Body
+    + Body
 
-            BINARY, SERIALIZED PROTOBUF EncryptedPayment
-   
-+ Response 200 (application/bitcoin-paymentack)
+            Serialized EncryptedProtocolMessage
 
-            BINARY, SERIALIZED PROTOBUF PAYMENTACK
-       
 + Response 200 (application/json)
 
         {
             "success": true,
-            "message": "EncryptedPayment Accepted"
+            "message": "Payment Protocol message accepted"
         }
-
+               
 + Response 400 (application/json)
 
         {
-           "success": false,
-           "message": "Invalid Payment Submitted"
+            "success": "false",
+            "message", "Invalid Request"
         }
-       
-+ Response 404 (application/json)
-
-        {
-           "success": false,
-           "message": "Unable to Retrieve PaymentRequest associated with Payment."
-        }
-       
+        
 + Response 500 (application/json)
 
         {
-           "success": false,
-           "message": "Error Retrieving PaymentRequest."
-        }        
+            "success": false,
+            "message": "error_message"
+        }
 
-### Retrieve EncryptedPayment Message [GET /payment/{id}]
+### Delete Payment Protocol Message [DELETE /paymentprotocol/{tx_id}/{identifier}/{messagetype}]
 
-+ Parameters
-
-   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment ID
-
-+ Request
-
-   + Headers
-
-            Accept: application/bitcoin-encrypted-paymentack
-            Content-Transfer-Encoding: "binary"
-
-+ Response 200 (application/bitcoin-encrypted-payment)
-
-    + Headers
-
-            Content-Transfer-Encoding: "binary"
-
-    + Body
-    
-            BINARY, SERIALIZED PROTOBUF EncryptedPayment
-            
-+ Response 404 (application/json)
-
-    + Body
-    
-            {
-                "success": false,
-                "message": "EncryptedPayment Not Found or Not Yet Ready"
-            }
-
-## PaymentACK Handling [/paymentack]
-
-### Submit EncryptedPaymentACK Message [POST /paymentack/{id}]
-
-Submit an EncryptedPaymentACK in response to an EncryptedPayment
+Delete Payment Protocol messages (ProtocolMessage / EncryptedProtocolMessage) for a given transaction based on transaction identifier and message type.
 
 + Parameters
 
-   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment ID
+    - tx_id (required, string, `5935d444b6214296887f4c88e66f56285935d444b6214296887f4c88e66f56285935d444b6214296887f4c88e66f5628`) ... Store and Forward BIP75 Transaction ID
+    - identifier (required, string, `6d73675f6964656e746966696572`) ... Hex-Encoded Payment Protocol transaction identifier
+    - messagetype (required, string, `invoice_request`) ... Any of the values of ProtocolMessageType `(ie., invoice_request, payment_request, payment, payment_ack)`
 
-+ Request (application/bitcoin-encrypted-paymentack)
-
-   + Headers
-
-            Accept: application/json
-            Content-Transfer-Encoding: "binary"
-           
-   + Body
-
-            BINARY, SERIALIZED PROTOBUF EncryptedPaymentACK
-            
 + Request (application/json)
 
-   + Headers
+    + Headers
 
-            Accept: application/json
-           
-   + Body
-
-            {
-                "error_code": 400,
-                "error_message": "Payment Not Accepted by Receiver"
-            }
-            
-   
-+ Response 200 (application/bitcoin-paymentack)
-
-            BINARY, SERIALIZED PROTOBUF PAYMENTACK
-       
-+ Response 200 (application/json)
-
-        {
-            "success": true,
-            "message": "EncryptedPaymentAck Accepted"
-        }
-
-+ Response 400 (application/json)
-
-        {
-           "success": false,
-           "message": "EncryptedPaymentAck Public Key Mismatch"
-        }
-       
-+ Response 404 (application/json)
-
-        {
-           "success": false,
-           "message": "Unable to Retrieve PaymentRequest associated with Payment."
-        }
-       
-+ Response 503 (application/json)
-
-        {
-           "success": false,
-           "message": "Unable to Store EncryptedPaymentAck, Please Try Again Later"
-        }        
-
-### Retrieve EncryptedPaymentAck Message [GET /paymentack/{id}]
-
-+ Parameters
-
-   + id (required, string, `f282ad27e92f4e518a0738dd99469fdsfasdgfdgt34t4hh45ujy470`) ... Payment ID
-
-+ Request
-
-   + Headers
-
-            Accept: application/bitcoin-encrypted-paymentack, application/json
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
             Content-Transfer-Encoding: "binary"
-
-+ Response 200 (application/bitcoin-encrypted-paymentack)
-
-    + Headers
-
-            Content-Transfer-Encoding: "binary"
-
     + Body
-    
-            BINARY, SERIALIZED PROTOBUF EncryptedPaymentAck
-            
-+ Response 404 (application/json)
 
-    + Headers
++ Response 204
     
-            Retry-After: 120
-
-    + Body
-    
-            {
-                "success": false,
-                "message": "EncryptedPaymentAck Not Found or Not Yet Ready"
-            }
-
-+ Response 503 (application/json)
-
-    + Headers
-    
-            Retry-After: 120
-
-    + Body
-    
-            {
-                "success": false,
-                "message": "EncryptedPaymentAck Not Found"
-            }

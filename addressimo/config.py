@@ -21,6 +21,7 @@ config.rpr_expiration_days = 16
 config.ir_nonce_allowable = 5
 config.ir_nonce_db_maxkeys = 100000000
 config.old_nonce_cleanup_size = 1000
+config.paymentprotocol_message_expiration_days = 7
 
 # Operational Modes
 config.store_and_forward_only = False
@@ -38,11 +39,10 @@ config.plugin_directories = [
 
 # Redis Setup
 config.redis_id_obj_uri = 'redis://localhost:6379/1'
-config.redis_ir_queue = 'redis://localhost:6379/2'
-config.redis_ir_nonce_uri = 'redis://localhost:6379/7'
+config.redis_tx_map_uri = 'redis://localhost:6379/2'
+config.redis_tx_uri = 'redis://localhost:6379/3'
 config.redis_pr_store = 'redis://localhost:6379/3'
 config.redis_payment_store = 'redis://localhost:6379/4'
-config.redis_epr_data = 'redis://localhost:6379/5'
 config.redis_logdb_uri = 'redis://localhost:6379/6'
 config.redis_address_branch_uri = 'redis://localhost:6379/13'
 config.redis_addr_cache_uri = 'redis://localhost:6379/14'

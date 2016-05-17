@@ -5,23 +5,30 @@ import json
 import os
 import requests
 import ssl
+import sys
 import time
 import unittest
 
 from OpenSSL import crypto
 
+from binascii import unhexlify
 from datetime import datetime, timedelta
 from ecdsa import SigningKey, curves, VerifyingKey
 from ecdsa.util import sigdecode_der, sigencode_der
 from flask.ext.testing import LiveServerTestCase
 from OpenSSL import crypto
 from Crypto.Cipher import AES
+from cryptography.hazmat.primitives.ciphers import (
+    Cipher, algorithms, modes
+)
+from cryptography.hazmat.backends import default_backend
+from cryptography.exceptions import InvalidTag
 
 from addressimo.config import config
 from addressimo.crypto import HMAC_DRBG
 from addressimo.data import IdObject
 from addressimo.plugin import PluginManager
-from addressimo.paymentprotocol.paymentrequest_pb2 import PaymentRequest, PaymentDetails, EncryptedPaymentRequest, InvoiceRequest, X509Certificates, EncryptedInvoiceRequest, EncryptedPayment, EncryptedPaymentACK, Payment, PaymentACK, Output
+from addressimo.paymentprotocol.paymentrequest_pb2 import PaymentRequest, PaymentDetails, InvoiceRequest, X509Certificates, Payment, PaymentACK, Output, ProtocolMessage, EncryptedProtocolMessage, ProtocolMessageType
 from addressimo.util import LogUtil
 from server import app
 
@@ -166,11 +173,15 @@ class BIP75FunctionalTest(LiveServerTestCase):
         cls.test_id_obj = IdObject()
         cls.test_id_obj.auth_public_key = cls.receiver_sk.get_verifying_key().to_der().encode('hex')
         cls.test_id_obj.id = 'testid'
-        cls.test_id_obj.ir_only = True
+        cls.test_id_obj.paymentprotocol_only = True
 
         cls.resolver = PluginManager.get_plugin('RESOLVER', config.resolver_type)
         cls.resolver.save(cls.test_id_obj)
         log.info('Save testid IdObj')
+
+        log.info('Setup Class Identifier')
+
+        cls.identifier = None
 
     @classmethod
     def tearDownClass(cls):
@@ -181,38 +192,150 @@ class BIP75FunctionalTest(LiveServerTestCase):
         log.info('Clean Up Functest')
 
         log.info('Deleting All testid InvoiceRequests if any exist')
-        for ir in resolver.get_invoicerequests('testid'):
-            log.info('Deleting InvoiceRequest [ID: %s]' % ir.get('id'))
-            resolver.delete_invoicerequest('testid', ir.get('id'))
+        for message_type in ProtocolMessageType.keys():
+            resolver.delete_paymentprotocol_message(cls.identifier, message_type, id='testid')
 
         log.info('Deleting Test IdObj')
         resolver.delete(BIP75FunctionalTest.test_id_obj)
 
-    def ecdh_encrypt(self, plaintext, nonce, pubkey, privkey):
+    def long_to_bytes(self, val, endianness='big'):
+        width = val.bit_length()
+        width += 8 - ((width % 8) or 8)
+        fmt = '%%0%dx' % (width // 4)
+        s = unhexlify(fmt % val)
+        if endianness == 'little':
+            # see http://stackoverflow.com/a/931095/309233
+            s = s[::-1]
+        return s
+
+    def get_ecdh_value(self, pubkey, privkey):
 
         ecdh_point = privkey.privkey.secret_multiplier * pubkey.pubkey.point
-        log.debug('ECDH_POINT: %s' % ecdh_point.x())
+        return hashlib.sha512(self.long_to_bytes(ecdh_point.x())).digest()
+
+    def ecdh_encrypt(self, plaintext, nonce, pubkey, privkey, aad=None):
+
+        ecdh_point_hash = self.get_ecdh_value(pubkey, privkey)
+        log.info('ECDH_POINT: %s' % ecdh_point_hash.encode('hex'))
 
         # Encrypt PR using HMAC-DRBG
-        drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=str(nonce))
+        drbg = HMAC_DRBG(entropy=ecdh_point_hash, nonce=self.long_to_bytes(nonce))
         encryption_key = drbg.generate(32)
-        iv = drbg.generate(16)
-        encrypt_obj = AES.new(encryption_key, AES.MODE_CBC, iv)
-        ciphertext = encrypt_obj.encrypt(pad(plaintext))
-        return ciphertext
+        iv = drbg.generate(12)
 
-    def ecdh_decrypt(self, ciphertext, nonce, pubkey, privkey):
+        encryptor = Cipher(algorithms.AES(encryption_key), modes.GCM(iv), backend=default_backend()).encryptor()
+        if aad:
+            encryptor.authenticate_additional_data(aad)
 
-        ecdh_point = privkey.privkey.secret_multiplier * pubkey.pubkey.point
-        log.debug('ECDH_POINT: %s' % ecdh_point.x())
+        ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+
+        return encryptor.tag + ciphertext
+
+    def ecdh_decrypt(self, ciphertext, nonce, pubkey, privkey, aad=None):
+
+        ecdh_point_hash = self.get_ecdh_value(pubkey, privkey)
+        log.info('ECDH_POINT: %s' % ecdh_point_hash.encode('hex'))
 
         # Encrypt PR using HMAC-DRBG
-        drbg = HMAC_DRBG(entropy=str(ecdh_point.x()), nonce=str(nonce))
+        drbg = HMAC_DRBG(entropy=ecdh_point_hash, nonce=self.long_to_bytes(nonce))
         encryption_key = drbg.generate(32)
-        iv = drbg.generate(16)
-        encrypt_obj = AES.new(encryption_key, AES.MODE_CBC, iv)
-        plaintext = unpad(encrypt_obj.decrypt(ciphertext))
-        return plaintext
+        iv = drbg.generate(12)
+
+        decryptor = Cipher(algorithms.AES(encryption_key), modes.GCM(iv, ciphertext[:16]), backend=default_backend()).decryptor()
+        if aad:
+            decryptor.authenticate_additional_data(aad)
+
+        return decryptor.update(ciphertext[16:]) + decryptor.finalize()
+
+    def parse_protocol_message(self, data):
+        try:
+            epm = EncryptedProtocolMessage()
+            epm.ParseFromString(data)
+            return epm
+        except:
+            try:
+                pm = ProtocolMessage()
+                pm.ParseFromString()
+                return pm
+            except:
+                pass
+
+        self.fail(msg='Unable to Parse Payment Protocol Message')
+        
+    def create_encrypted_protocol_message(self, message, receiver_pubkey, sender_pubkey, private_key, identifier=None):
+
+        ecdh_pubkey = receiver_pubkey
+        if private_key.get_verifying_key().to_der() == receiver_pubkey.to_der():
+            ecdh_pubkey = sender_pubkey
+
+        nonce = int(time.time() * 1000000)
+
+        ciphertext = self.ecdh_encrypt(
+            plaintext=message.SerializeToString(),
+            nonce=nonce,
+            pubkey=ecdh_pubkey,
+            privkey=private_key
+        )
+
+        epm = EncryptedProtocolMessage()
+
+        if isinstance(message, InvoiceRequest):
+            epm.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
+        elif isinstance(message, PaymentRequest):
+            epm.message_type = ProtocolMessageType.Value('PAYMENT_REQUEST')
+        elif isinstance(message, Payment):
+            epm.message_type = ProtocolMessageType.Value('PAYMENT')
+        elif isinstance(message, PaymentACK):
+            epm.message_type = ProtocolMessageType.Value('PAYMENT_ACK')
+        else:
+            self.fail("Invalid ProtocolMessage Type")
+
+        if not identifier:
+            identifier = hashlib.sha256(message.SerializeToString()).digest()
+
+        epm.encrypted_message = ciphertext
+        epm.receiver_public_key = receiver_pubkey.to_der()
+        epm.sender_public_key = sender_pubkey.to_der()
+        epm.identifier = identifier
+        epm.nonce = nonce
+        epm.signature = ''
+        epm.signature = private_key.sign(epm.SerializeToString(), hashfunc=hashlib.sha256, sigencode=sigencode_der)
+
+        return epm
+
+    def get_decrypted_protocol_message(self, message, pubkey, privkey):
+
+        try:
+            decrypted = self.ecdh_decrypt(
+                ciphertext=message.encrypted_message,
+                nonce=message.nonce,
+                pubkey=pubkey,
+                privkey=privkey
+            )
+        except InvalidTag:
+            self.fail("InvalidTag Exception Occurred While Decrypting Message")
+
+        if not decrypted:
+            self.fail('Unable to Decrypt Protocol Message')
+
+        msg = None
+        try:
+            if message.message_type == ProtocolMessageType.Value('INVOICE_REQUEST'):
+                msg = InvoiceRequest()
+                msg.ParseFromString(decrypted)
+            elif message.message_type == ProtocolMessageType.Value('PAYMENT_REQUEST'):
+                msg = PaymentRequest()
+                msg.ParseFromString(decrypted)
+            elif message.message_type == ProtocolMessageType.Value('PAYMENT'):
+                msg = Payment()
+                msg.ParseFromString(decrypted)
+            elif message.message_type == ProtocolMessageType.Value('PAYMENT_ACK'):
+                msg = PaymentACK()
+                msg.ParseFromString(decrypted)
+        except:
+            self.fail("Unable to Parse Decrpyted Serialized Payment Protocol Message")
+
+        return msg
 
     def test_bip75_flow(self):
 
@@ -230,14 +353,13 @@ class BIP75FunctionalTest(LiveServerTestCase):
         #########################
         log.info("Building InvoiceRequest")
 
-        self.request_nonce = int(time.time() * 1000000)
+        sender_certs = X509Certificates()
+        sender_certs.certificate.append(ssl.PEM_cert_to_DER_cert(crypto.dump_certificate(crypto.FILETYPE_PEM, self.x509_sender_cert)))
+
         invoice_request = InvoiceRequest()
         invoice_request.sender_public_key = BIP75FunctionalTest.sender_sk.get_verifying_key().to_der()
         invoice_request.amount = 75
         invoice_request.pki_type = 'x509+sha256'
-
-        sender_certs = X509Certificates()
-        sender_certs.certificate.append(ssl.PEM_cert_to_DER_cert(crypto.dump_certificate(crypto.FILETYPE_PEM, self.x509_sender_cert)))
         invoice_request.pki_data = sender_certs.SerializeToString()
         invoice_request.notification_url = 'https://notify.me/longId'
         invoice_request.signature = ""
@@ -247,23 +369,16 @@ class BIP75FunctionalTest(LiveServerTestCase):
         invoice_request.signature = sig
 
         ##################################
-        # Create EncryptedInvoiceRequest
+        # Create Encrypted InvoiceRequest
         ##################################
-        ciphertext = self.ecdh_encrypt(
-            plaintext=invoice_request.SerializeToString(),
-            nonce=self.request_nonce,
-            pubkey=BIP75FunctionalTest.receiver_sk.get_verifying_key(),
-            privkey=BIP75FunctionalTest.sender_sk
+        eir = self.create_encrypted_protocol_message(
+            message=invoice_request,
+            receiver_pubkey=BIP75FunctionalTest.receiver_sk.get_verifying_key(),
+            sender_pubkey=BIP75FunctionalTest.sender_sk.get_verifying_key(),
+            private_key=BIP75FunctionalTest.sender_sk
         )
 
-        eir = EncryptedInvoiceRequest()
-        eir.sender_public_key = BIP75FunctionalTest.sender_sk.get_verifying_key().to_der()
-        eir.receiver_public_key = BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der()
-        eir.nonce = self.request_nonce
-        eir.encrypted_invoice_request = ciphertext
-        eir.invoice_request_hash = hashlib.sha256(invoice_request.SerializeToString()).digest()
-        eir.signature = ''
-        eir.signature = BIP75FunctionalTest.sender_sk.sign(eir.SerializeToString(), hashfunc=hashlib.sha256, sigencode=sigencode_der)
+        BIP75FunctionalTest.identifier = eir.identifier
 
         #############################
         # Sign & Submit HTTP Request
@@ -274,23 +389,22 @@ class BIP75FunctionalTest(LiveServerTestCase):
         ir_headers = {
             'X-Identity': BIP75FunctionalTest.sender_sk.get_verifying_key().to_der().encode('hex'),
             'X-Signature': msg_sig.encode('hex'),
-            'Content-Type': 'application/bitcoin-encrypted-invoicerequest',
+            'Content-Type': 'application/bitcoin-encrypted-paymentprotocol-message',
             'Content-Transfer-Encoding': 'binary'
         }
-        log.info("Submitting EncryptedInvoiceRequest")
+        log.info("Submitting InvoiceRequest using an EncryptedProtocolMessage")
         response = requests.post(post_url, headers=ir_headers, data=eir.SerializeToString())
 
         # Validate Response
         self.assertEqual(202, response.status_code)
-        self.assertTrue(response.headers.get('Location').startswith('https://%s/encryptedpaymentrequest' % config.site_url))
+        self.assertTrue(response.headers.get('Location').startswith('https://%s/paymentprotocol' % config.site_url))
         self.payment_id = response.headers.get('Location').rsplit('/', 1)[1]
-
         log.info('Payment ID: %s' % self.payment_id)
 
-        ######################################
-        # Get InvoiceRequests from Addressimo
-        ######################################
-        sign_url = "%s/address/testid/invoicerequests" % self.get_server_url()
+        ###############################################
+        # Get Pending InvoiceRequests from Addressimo
+        ###############################################
+        sign_url = "%s/address/testid/paymentprotocol" % self.get_server_url()
         msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url)
 
         ir_req_headers = {
@@ -298,46 +412,35 @@ class BIP75FunctionalTest(LiveServerTestCase):
             'X-Signature': msg_sig.encode('hex')
         }
 
-        log.info("Retrieving EncryptedInvoiceRequests")
+        log.info("Retrieving Encrypted InvoiceRequests")
         response = requests.get(sign_url, headers=ir_req_headers)
 
-        log.info("EncryptedInvoiceRequest Retrieval Response [CODE: %d | TEXT: %s]" % (response.status_code, response.text))
+        log.info("Encrypted InvoiceRequest Retrieval Response [CODE: %d | TEXT: %s]" % (response.status_code, response.text))
         self.assertEqual(200, response.status_code)
         self.assertIsNotNone(response.text)
 
         ###############################################
-        # Retrieve and Decrypt EncryptedInvoiceRequest
+        # Retrieve and Decrypt Encrypted InvoiceRequest
         ###############################################
-        received_eir = EncryptedInvoiceRequest()
-        try:
-            resp_json = response.json()
-            received_eir.ParseFromString(resp_json.get('requests')[0].get('encrypted_invoice_request','').decode('hex'))
-        except Exception as e:
-            self.fail("Exception while parsing EncryptedInvoiceRequest: %s" % str(e))
+        received_eir = None
+        for epm in response.json()['encrypted_protocol_messages']:
+            _local_msg = self.parse_protocol_message(epm.decode('hex'))
+            if _local_msg.message_type == ProtocolMessageType.Value('INVOICE_REQUEST') and _local_msg.identifier == BIP75FunctionalTest.identifier:
+                received_eir = _local_msg
 
-        # Determine ECDH Shared Key
+        if not received_eir:
+            self.fail('Failed to Retrieve Encrypted InvoiceRequest message')
+
         sender_vk = VerifyingKey.from_der(received_eir.sender_public_key)
         self.assertEqual(received_eir.receiver_public_key, BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der())
 
-        decrypt_ciphertext = self.ecdh_decrypt(
-            ciphertext=received_eir.encrypted_invoice_request,
-            nonce=received_eir.nonce,
-            pubkey=sender_vk,
-            privkey=BIP75FunctionalTest.receiver_sk
-        )
+        received_invoice_request = self.get_decrypted_protocol_message(received_eir, sender_vk, BIP75FunctionalTest.receiver_sk)
 
-        received_invoice_request = InvoiceRequest()
-        try:
-            received_invoice_request.ParseFromString(decrypt_ciphertext)
-            self.assertEqual(received_eir.invoice_request_hash, hashlib.sha256(received_invoice_request.SerializeToString()).digest())
-            log.info("Successfully Retrieved and Parsed an InvoiceRequest")
-        except Exception as e:
-            self.fail("Exception while parsing InvoiceRequest: %s" % str(e))
+        #########################
+        # Create PaymentRequest
+        #########################
+        log.info("Building PaymentRequest")
 
-        #######################
-        # Create EPR
-        #######################
-        log.info("Building EncryptedPaymentRequest")
         pd = PaymentDetails()
         pd.network = 'main'
         output = pd.outputs.add()
@@ -349,117 +452,98 @@ class BIP75FunctionalTest(LiveServerTestCase):
         pd.payment_url = ''
         pd.merchant_data = ''
 
+        receiver_certs = X509Certificates()
+        receiver_certs.certificate.append(ssl.PEM_cert_to_DER_cert(crypto.dump_certificate(crypto.FILETYPE_PEM, self.x509_receiver_cert)))
+
         pr = PaymentRequest()
         pr.payment_details_version = 1
-        pr.pki_type = 'none'
-        pr.pki_data = ''
+        pr.pki_type = 'x509+sha256'
+        pr.pki_data = receiver_certs.SerializeToString()
         pr.serialized_payment_details = pd.SerializeToString()
-        pr.signature = 'testforme'
+        pr.signature = ''
 
-        self.serialized_pr = pr.SerializeToString()
+        sig = crypto.sign(self.x509_receiver_cert_privkey, pr.SerializeToString(), 'sha1')
+        pr.signature = sig
 
-        # Encrypt PaymentRequest
-        next_nonce = int(time.time() * 1000000)
-        ciphertext = self.ecdh_encrypt(
-            plaintext=self.serialized_pr,
-            nonce=next_nonce,
-            pubkey=VerifyingKey.from_der(received_invoice_request.sender_public_key),
-            privkey=BIP75FunctionalTest.receiver_sk
+        log.info('Encapsulating PaymentRequest in EncryptedProtocolMessage')
+        epr = self.create_encrypted_protocol_message(
+            message=pr,
+            receiver_pubkey=BIP75FunctionalTest.receiver_sk.get_verifying_key(),
+            sender_pubkey=BIP75FunctionalTest.sender_sk.get_verifying_key(),
+            private_key=BIP75FunctionalTest.receiver_sk,
+            identifier=BIP75FunctionalTest.identifier
         )
 
-        self.assertEqual(self.payment_id, resp_json.get('requests')[0]['id'])
-
-        # Create EncryptedPaymentRequest
-        epr = EncryptedPaymentRequest()
-        epr.encrypted_payment_request = ciphertext
-        epr.receiver_public_key = received_eir.receiver_public_key
-        epr.sender_public_key = received_eir.sender_public_key
-        epr.payment_request_hash = hashlib.sha256(self.serialized_pr).digest()
-        epr.nonce = next_nonce
-        epr.signature = ''
-        epr.signature = BIP75FunctionalTest.receiver_sk.sign(epr.SerializeToString(), hashfunc=hashlib.sha256, sigencode=sigencode_der)
-
-        submit_rpr_data = {
-            "ready_requests": [
-                {
-                    "id": resp_json.get('requests')[0].get('id'),
-                    "encrypted_payment_request": epr.SerializeToString().encode('hex')
-                }
-            ]
-        }
-
-        sign_url = "%s/address/testid/invoicerequests" % self.get_server_url()
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url + json.dumps(submit_rpr_data))
+        sign_url = "%s/address/testid/paymentprotocol" % self.get_server_url()
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url + epr.SerializeToString())
 
         ir_req_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
             'X-Signature': msg_sig.encode('hex'),
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/bitcoin-encrypted-paymentprotocol-message',
+            'Content-Transfer-Encoding': 'binary'
         }
 
-        log.info("Submitting EncryptedPaymentRequest")
-        response = requests.post(sign_url, data=json.dumps(submit_rpr_data), headers=ir_req_headers)
-        log.info('SubmitEPR Response: %s' % response.text)
+        log.info("Submitting PaymentRequest using an EncryptedProtocolMessage")
+        response = requests.post(sign_url, data=epr.SerializeToString(), headers=ir_req_headers)
+        log.info('Submit PaymentRequest Response: %s' % response.text)
         self.assertEqual(200, response.status_code)
 
-        # Verify the InvoiceRequest was deleted after submission occurred
-        for ir in self.resolver.get_invoicerequests('testid'):
-            self.assertFalse(ir['id'] == resp_json.get('requests')[0]['id'])
+        ##############################################################################
+        # Delete InvoiceRequest after the PaymentRequest was submitted successfully
+        delete_url = "%s/address/testid/paymentprotocol/%s/invoice_request" % (self.get_server_url(), received_eir.identifier.encode('hex'))
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url)
 
-        # Make Sure One RPR Was Accepted
-        resp_json = response.json()
-        self.assertEqual(1, resp_json['ready_accept_count'])
+        ir_delete_headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': msg_sig.encode('hex')
+        }
+        response = requests.delete(delete_url, headers=ir_delete_headers)
+        self.assertEqual(response.status_code, requests.codes.no_content)
 
-        #######################
-        # Retrieve EncryptedPaymentRequest
-        #######################
-        log.info("Retrieving EncryptedPaymentRequest")
-        sign_url = "%s/encryptedpaymentrequest/%s" % (self.get_server_url(), self.payment_id)
-        response = requests.get(sign_url)
+        #####################################
+        # Retrieve Encrypted PaymentRequest
+        #####################################
+        log.info("Retrieving PaymentRequest")
+
+        sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url)
+        get_message_headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': msg_sig.encode('hex')
+        }
+        response = requests.get(sign_url, headers=get_message_headers)
         self.assertIsNotNone(response)
 
-        self.assertIn('Content-Transfer-Encoding', response.headers)
-        self.assertEqual('binary', response.headers.get('Content-Transfer-Encoding'))
         self.assertIn('Content-Type', response.headers)
-        self.assertEqual('application/bitcoin-encrypted-paymentrequest', response.headers.get('Content-Type'))
+        self.assertEqual('application/json', response.headers.get('Content-Type'))
 
-        returned_pr = EncryptedPaymentRequest()
-        try:
-            returned_pr.ParseFromString(response.content)
-            log.info("EncryptedPaymentRequest Parsed")
-        except Exception as e:
-            self.fail('Unable to Parse EncryptedPaymentRequest')
+        received_epr = None
+        for epm in response.json()['encrypted_protocol_messages']:
+            _local_msg = self.parse_protocol_message(epm.decode('hex'))
+            if _local_msg.message_type == ProtocolMessageType.Value('PAYMENT_REQUEST') and _local_msg.identifier == BIP75FunctionalTest.identifier:
+                received_epr = _local_msg
 
-        log.info('Received EncryptedPaymentRequest')
+        log.info('Received Encrypted PaymentRequest')
 
-        self.assertEqual(BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der(), returned_pr.receiver_public_key)
-        self.assertEqual(BIP75FunctionalTest.sender_sk.get_verifying_key().to_der(), returned_pr.sender_public_key)
-        self.assertEqual(ciphertext, returned_pr.encrypted_payment_request)
+        self.assertEqual(BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der(), received_epr.receiver_public_key)
+        self.assertEqual(BIP75FunctionalTest.sender_sk.get_verifying_key().to_der(), received_epr.sender_public_key)
 
         # Decrypt Response
-        decrypt_ciphertext = self.ecdh_decrypt(
-            ciphertext=returned_pr.encrypted_payment_request,
-            nonce=returned_pr.nonce,
-            pubkey=VerifyingKey.from_der(returned_pr.receiver_public_key),
+        returned_paymentrequest = self.get_decrypted_protocol_message(
+            message=received_epr,
+            pubkey=VerifyingKey.from_der(received_epr.receiver_public_key),
             privkey=BIP75FunctionalTest.sender_sk
         )
-        self.assertEqual(self.serialized_pr, decrypt_ciphertext)
-        log.info("Decrypted Text Matches Initial Serialized PaymentRequest")
 
-        rpr = PaymentRequest()
-        rpr.ParseFromString(decrypt_ciphertext)
-        self.assertEqual(1, rpr.payment_details_version)
-        self.assertEqual('none', rpr.pki_type)
-        self.assertEqual('', rpr.pki_data)
-        self.assertEqual(pd.SerializeToString(), rpr.serialized_payment_details)
-        self.assertEqual('testforme', rpr.signature)
-
-        # Authenticate PR Hash
-        self.assertEqual(hashlib.sha256(decrypt_ciphertext).digest(), returned_pr.payment_request_hash)
-        log.info("PaymentRequest SHA256 Hash Matches EncryptedPaymentRequest's Payment Request Hash")
+        self.assertEqual(1, returned_paymentrequest.payment_details_version)
+        self.assertEqual(pr.pki_type, returned_paymentrequest.pki_type)
+        self.assertEqual(pr.pki_data, returned_paymentrequest.pki_data)
+        self.assertEqual(pd.SerializeToString(), returned_paymentrequest.serialized_payment_details)
+        self.assertEqual(pr.signature, returned_paymentrequest.signature)
 
         #######################################
-        # Create / Submit (Encrypted)Payment
+        # Create / Submit Payment
         #######################################
         payment = Payment()
         payment.merchant_data = 'nodusttxs'.encode('hex')
@@ -467,157 +551,170 @@ class BIP75FunctionalTest(LiveServerTestCase):
         out = payment.refund_to.add()
         out.script = 'myp2shaddress'.encode('hex')
 
-        encrypted_payment = EncryptedPayment()
-        encrypted_payment.nonce = int(time.time() * 1000000)
-        encrypted_payment.sender_public_key = returned_pr.sender_public_key
-        encrypted_payment.receiver_public_key = returned_pr.receiver_public_key
-        encrypted_payment.payment_hash = hashlib.sha256(payment.SerializeToString()).digest()
-        encrypted_payment.encrypted_payment = self.ecdh_encrypt(
-            plaintext=payment.SerializeToString(),
-            nonce=encrypted_payment.nonce,
-            pubkey=VerifyingKey.from_der(encrypted_payment.receiver_public_key),
-            privkey=BIP75FunctionalTest.sender_sk
+        encrypted_payment = self.create_encrypted_protocol_message(
+            message=payment,
+            receiver_pubkey=VerifyingKey.from_der(received_epr.receiver_public_key),
+            sender_pubkey=VerifyingKey.from_der(received_epr.sender_public_key),
+            private_key=BIP75FunctionalTest.sender_sk,
+            identifier=BIP75FunctionalTest.identifier
         )
-        encrypted_payment.signature = ''
-        encrypted_payment.signature = BIP75FunctionalTest.sender_sk.sign(encrypted_payment.SerializeToString(), hashfunc=hashlib.sha256, sigencode=sigencode_der)
 
-        # Submit EncryptedPayment
-        sign_url = "%s/payment/%s" % (self.get_server_url(), self.payment_id)
+        # Submit Payment
+        sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
         msg_sig = BIP75FunctionalTest.sender_sk.sign(sign_url + encrypted_payment.SerializeToString())
 
         ep_req_headers = {
             'X-Identity': BIP75FunctionalTest.sender_sk.get_verifying_key().to_der().encode('hex'),
             'X-Signature': msg_sig.encode('hex'),
-            'Content-Type': 'application/bitcoin-encrypted-payment',
+            'Content-Type': 'application/bitcoin-encrypted-paymentprotocol-message',
             'Content-Transfer-Encoding': 'binary'
         }
 
-        log.info("Submitting EncryptedPayment")
+        log.info("Submitting Payment using an EncryptedProtocolMessage")
         response = requests.post(sign_url, data=encrypted_payment.SerializeToString(), headers=ep_req_headers)
-        log.info('Submit EncryptedPayment Response: %s' % response.text)
+        log.info('Submit Payment Response: %s' % response.text)
         self.assertEqual(200, response.status_code)
 
-        #######################
-        # Retrieve EncryptedPayment
-        #######################
-        log.info("Retrieving EncryptedPayment")
-        sign_url = "%s/payment/%s" % (self.get_server_url(), self.payment_id)
-        response = requests.get(sign_url)
+        ##############################################################################
+        # Delete PaymentRequest after the Payment was submitted successfully
+        delete_url = "%s/paymentprotocol/%s/%s/payment_request" % (self.get_server_url(), self.payment_id, received_eir.identifier.encode('hex'))
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url)
+
+        ir_delete_headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': msg_sig.encode('hex')
+        }
+        response = requests.delete(delete_url, headers=ir_delete_headers)
+        self.assertEqual(response.status_code, requests.codes.no_content)
+
+        ############################
+        # Retrieve Payment
+        ############################
+        log.info("Retrieving Payment")
+
+        sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url)
+        get_message_headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': msg_sig.encode('hex')
+        }
+
+        response = requests.get(sign_url, headers=get_message_headers)
         self.assertIsNotNone(response)
 
-        self.assertIn('Content-Transfer-Encoding', response.headers)
-        self.assertEqual('binary', response.headers.get('Content-Transfer-Encoding'))
         self.assertIn('Content-Type', response.headers)
-        self.assertEqual('application/bitcoin-encrypted-payment', response.headers.get('Content-Type'))
+        self.assertEqual('application/json', response.headers.get('Content-Type'))
 
-        returned_ep = EncryptedPayment()
-        try:
-            returned_ep.ParseFromString(response.content)
-            log.info("EncryptedPayment Parsed")
-        except Exception as e:
-            self.fail('Unable to Parse EncryptedPayment')
-
-        log.info('Received EncryptedPayment')
+        returned_ep = None
+        for epm in response.json()['encrypted_protocol_messages']:
+            _local_msg = self.parse_protocol_message(epm.decode('hex'))
+            if _local_msg.message_type == ProtocolMessageType.Value('PAYMENT') and _local_msg.identifier == BIP75FunctionalTest.identifier:
+                returned_ep = _local_msg
 
         self.assertEqual(BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der(), returned_ep.receiver_public_key)
         self.assertEqual(BIP75FunctionalTest.sender_sk.get_verifying_key().to_der(), returned_ep.sender_public_key)
-        self.assertEqual(encrypted_payment.encrypted_payment, returned_ep.encrypted_payment)
+        self.assertEqual(encrypted_payment.encrypted_message, returned_ep.encrypted_message)
 
-        # Decrypt Response
-        decrypt_ciphertext = self.ecdh_decrypt(
-            ciphertext=returned_ep.encrypted_payment,
-            nonce=returned_ep.nonce,
+        payment_msg = self.get_decrypted_protocol_message(
+            message=returned_ep,
             pubkey=VerifyingKey.from_der(returned_ep.sender_public_key),
             privkey=BIP75FunctionalTest.receiver_sk
         )
 
-        payment_msg = Payment()
-        payment_msg.ParseFromString(decrypt_ciphertext)
         self.assertEqual('nodusttxs'.encode('hex'), payment_msg.merchant_data)
         self.assertEqual(1, len(payment_msg.transactions))
         self.assertEqual('btc_tx'.encode('hex'), payment_msg.transactions[0])
 
-        # Authenticate PR Hash
-        self.assertEqual(hashlib.sha256(decrypt_ciphertext).digest(), returned_ep.payment_hash)
-        log.info("EncryptedPayment SHA256 Hash Matches EncryptedPayment's Payment Hash")
 
         #######################################
-        # Create / Submit (Encrypted)PaymentACK
+        # Create / Submit PaymentACK
         #######################################
         paymentack = PaymentACK()
         paymentack.payment.CopyFrom(payment_msg)
         paymentack.memo = 'Payment ACKed'
 
-        encrypted_paymentack = EncryptedPaymentACK()
-        encrypted_paymentack.nonce = int(time.time() * 1000000)
-        encrypted_paymentack.sender_public_key = epr.sender_public_key
-        encrypted_paymentack.receiver_public_key = epr.receiver_public_key
-        encrypted_paymentack.payment_ack_hash = hashlib.sha256(paymentack.SerializeToString()).digest()
-        encrypted_paymentack.encrypted_payment_ack = self.ecdh_encrypt(
-            plaintext=paymentack.SerializeToString(),
-            nonce=encrypted_paymentack.nonce,
-            pubkey=VerifyingKey.from_der(encrypted_paymentack.sender_public_key),
-            privkey=BIP75FunctionalTest.receiver_sk
+        encrypted_paymentack = self.create_encrypted_protocol_message(
+            message=paymentack,
+            receiver_pubkey=VerifyingKey.from_der(epr.receiver_public_key),
+            sender_pubkey=VerifyingKey.from_der(epr.sender_public_key),
+            private_key=BIP75FunctionalTest.receiver_sk,
+            identifier=BIP75FunctionalTest.identifier
         )
-        encrypted_paymentack.signature = ''
-        encrypted_paymentack.signature = BIP75FunctionalTest.receiver_sk.sign(encrypted_paymentack.SerializeToString(), hashfunc=hashlib.sha256, sigencode=sigencode_der)
 
-        # Submit EncryptedPaymentAck
-        sign_url = "%s/paymentack/%s" % (self.get_server_url(), self.payment_id)
+        # Submit PaymentAck
+        sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
         msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url + encrypted_paymentack.SerializeToString())
 
         ep_req_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
             'X-Signature': msg_sig.encode('hex'),
-            'Content-Type': 'application/bitcoin-encrypted-paymentack',
+            'Content-Type': 'application/bitcoin-encrypted-paymentprotocol-message',
             'Content-Transfer-Encoding': 'binary'
         }
 
-        log.info("Submitting EncryptedPaymentAck")
+        log.info("Submitting PaymentAck using an EncryptedProtocolMessage")
         response = requests.post(sign_url, data=encrypted_paymentack.SerializeToString(), headers=ep_req_headers)
-        log.info('Submit EncryptedPaymentAck Response: %s' % response.text)
+        log.info('Submit PaymentAck Response: %s' % response.text)
         self.assertEqual(200, response.status_code)
 
+        ##############################################################################
+        # Delete Payment after the PaymentACK was submitted successfully
+        delete_url = "%s/address/testid/paymentprotocol/%s/payment" % (self.get_server_url(), received_eir.identifier.encode('hex'))
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url)
+
+        ir_delete_headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': msg_sig.encode('hex')
+        }
+        response = requests.delete(delete_url, headers=ir_delete_headers)
+        self.assertEqual(response.status_code, requests.codes.no_content)
+
         ###############################
-        # Retrieve EncryptedPaymentAck
+        # Retrieve PaymentAck
         ###############################
         log.info("Retrieving EncryptedPaymentAck")
-        sign_url = "%s/paymentack/%s" % (self.get_server_url(), self.payment_id)
-        response = requests.get(sign_url)
+        sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url)
+        get_message_headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': msg_sig.encode('hex')
+        }
+        response = requests.get(sign_url, headers=get_message_headers)
         self.assertIsNotNone(response)
 
-        self.assertIn('Content-Transfer-Encoding', response.headers)
-        self.assertEqual('binary', response.headers.get('Content-Transfer-Encoding'))
         self.assertIn('Content-Type', response.headers)
-        self.assertEqual('application/bitcoin-encrypted-paymentack', response.headers.get('Content-Type'))
+        self.assertEqual('application/json', response.headers.get('Content-Type'))
 
-        returned_epa = EncryptedPaymentACK()
-        try:
-            returned_epa.ParseFromString(response.content)
-            log.info("EncryptedPaymentACK Parsed")
-        except Exception as e:
-            self.fail('Unable to Parse EncryptedPaymentACK')
+        returned_epa = None
+        for epm in response.json()['encrypted_protocol_messages']:
+            _local_msg = self.parse_protocol_message(epm.decode('hex'))
+            if _local_msg.message_type == ProtocolMessageType.Value('PAYMENT_ACK') and _local_msg.identifier == BIP75FunctionalTest.identifier:
+                returned_epa = _local_msg
 
-        log.info('Received EncryptedPaymentACK')
+        log.info('Received PaymentACK')
 
         self.assertEqual(BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der(), returned_ep.receiver_public_key)
         self.assertEqual(BIP75FunctionalTest.sender_sk.get_verifying_key().to_der(), returned_ep.sender_public_key)
-        self.assertEqual(encrypted_paymentack.encrypted_payment_ack, returned_epa.encrypted_payment_ack)
+        self.assertEqual(encrypted_paymentack.encrypted_message, returned_epa.encrypted_message)
 
-        # Decrypt Response
-        decrypt_ciphertext = self.ecdh_decrypt(
-            ciphertext=returned_epa.encrypted_payment_ack,
-            nonce=returned_epa.nonce,
-            pubkey=VerifyingKey.from_der(returned_epa.receiver_public_key),
-            privkey=BIP75FunctionalTest.sender_sk
+        paymentack_msg = self.get_decrypted_protocol_message(
+            message=returned_epa,
+            pubkey=VerifyingKey.from_der(returned_epa.sender_public_key),
+            privkey=BIP75FunctionalTest.receiver_sk
         )
+        self.assertEqual(paymentack_msg, paymentack)
 
-        paymentack_msg = PaymentACK()
-        paymentack_msg.ParseFromString(decrypt_ciphertext)
+        ##############################################################################
+        # Delete PaymentACK after the PaymentACK was retrieved successfully
+        delete_url = "%s/address/testid/paymentprotocol/%s/payment_ack" % (self.get_server_url(), received_eir.identifier.encode('hex'))
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url)
 
-        # Authenticate PR Hash
-        self.assertEqual(hashlib.sha256(decrypt_ciphertext).digest(), returned_epa.payment_ack_hash)
-        log.info("EncryptedPaymentAck SHA256 Hash Matches EncryptedPaymentAck's PaymentAck Hash")
+        ir_delete_headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': msg_sig.encode('hex')
+        }
+        response = requests.delete(delete_url, headers=ir_delete_headers)
+        self.assertEqual(response.status_code, requests.codes.no_content)
 
 if __name__ == '__main__':
 
