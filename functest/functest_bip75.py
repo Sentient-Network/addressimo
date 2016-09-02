@@ -28,6 +28,7 @@ from addressimo.config import config
 from addressimo.crypto import HMAC_DRBG
 from addressimo.data import IdObject
 from addressimo.plugin import PluginManager
+from addressimo.paymentprotocol.bip75util import BIP75_STATUS_OK
 from addressimo.paymentprotocol.paymentrequest_pb2 import PaymentRequest, PaymentDetails, InvoiceRequest, X509Certificates, Payment, PaymentACK, Output, ProtocolMessage, EncryptedProtocolMessage, ProtocolMessageType
 from addressimo.util import LogUtil
 from server import app
@@ -293,6 +294,8 @@ class BIP75FunctionalTest(LiveServerTestCase):
         if not identifier:
             identifier = hashlib.sha256(message.SerializeToString()).digest()
 
+        epm.version = 1
+        epm.status_code = BIP75_STATUS_OK
         epm.encrypted_message = ciphertext
         epm.receiver_public_key = receiver_pubkey.to_der()
         epm.sender_public_key = sender_pubkey.to_der()

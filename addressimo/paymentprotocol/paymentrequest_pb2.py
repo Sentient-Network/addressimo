@@ -19,7 +19,7 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='paymentrequest.proto',
   package='payments',
-  serialized_pb=_b('\n\x14paymentrequest.proto\x12\x08payments\"+\n\x06Output\x12\x11\n\x06\x61mount\x18\x01 \x01(\x04:\x01\x30\x12\x0e\n\x06script\x18\x02 \x02(\x0c\"\xa3\x01\n\x0ePaymentDetails\x12\x15\n\x07network\x18\x01 \x01(\t:\x04main\x12!\n\x07outputs\x18\x02 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04time\x18\x03 \x02(\x04\x12\x0f\n\x07\x65xpires\x18\x04 \x01(\x04\x12\x0c\n\x04memo\x18\x05 \x01(\t\x12\x13\n\x0bpayment_url\x18\x06 \x01(\t\x12\x15\n\rmerchant_data\x18\x07 \x01(\x0c\"\x95\x01\n\x0ePaymentRequest\x12\"\n\x17payment_details_version\x18\x01 \x01(\r:\x01\x31\x12\x16\n\x08pki_type\x18\x02 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x03 \x01(\x0c\x12\"\n\x1aserialized_payment_details\x18\x04 \x02(\x0c\x12\x11\n\tsignature\x18\x05 \x01(\x0c\"\'\n\x10X509Certificates\x12\x13\n\x0b\x63\x65rtificate\x18\x01 \x03(\x0c\"i\n\x07Payment\x12\x15\n\rmerchant_data\x18\x01 \x01(\x0c\x12\x14\n\x0ctransactions\x18\x02 \x03(\x0c\x12#\n\trefund_to\x18\x03 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04memo\x18\x04 \x01(\t\">\n\nPaymentACK\x12\"\n\x07payment\x18\x01 \x02(\x0b\x32\x11.payments.Payment\x12\x0c\n\x04memo\x18\x02 \x01(\t\"\xa3\x01\n\x0eInvoiceRequest\x12\x19\n\x11sender_public_key\x18\x01 \x02(\x0c\x12\x11\n\x06\x61mount\x18\x03 \x01(\x04:\x01\x30\x12\x16\n\x08pki_type\x18\x04 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x05 \x01(\x0c\x12\x0c\n\x04memo\x18\x06 \x01(\t\x12\x18\n\x10notification_url\x18\x07 \x01(\t\x12\x11\n\tsignature\x18\x08 \x01(\x0c\"\xa3\x01\n\x0fProtocolMessage\x12\x33\n\x0cmessage_type\x18\x01 \x02(\x0e\x32\x1d.payments.ProtocolMessageType\x12\x1a\n\x12serialized_message\x18\x02 \x02(\x0c\x12\x13\n\x0bstatus_code\x18\x03 \x01(\x04\x12\x16\n\x0estatus_message\x18\x04 \x01(\t\x12\x12\n\nidentifier\x18\x05 \x01(\x0c\"\x85\x02\n\x18\x45ncryptedProtocolMessage\x12\x33\n\x0cmessage_type\x18\x01 \x02(\x0e\x32\x1d.payments.ProtocolMessageType\x12\x19\n\x11\x65ncrypted_message\x18\x02 \x02(\x0c\x12\x1b\n\x13receiver_public_key\x18\x03 \x02(\x0c\x12\x19\n\x11sender_public_key\x18\x04 \x02(\x0c\x12\r\n\x05nonce\x18\x05 \x02(\x04\x12\x11\n\tsignature\x18\x06 \x01(\x0c\x12\x12\n\nidentifier\x18\x07 \x01(\x0c\x12\x13\n\x0bstatus_code\x18\x08 \x01(\x04\x12\x16\n\x0estatus_message\x18\t \x01(\t*]\n\x13ProtocolMessageType\x12\x13\n\x0fINVOICE_REQUEST\x10\x00\x12\x13\n\x0fPAYMENT_REQUEST\x10\x01\x12\x0b\n\x07PAYMENT\x10\x02\x12\x0f\n\x0bPAYMENT_ACK\x10\x03\x42(\n\x1eorg.bitcoin.protocols.paymentsB\x06Protos')
+  serialized_pb=_b('\n\x14paymentrequest.proto\x12\x08payments\"+\n\x06Output\x12\x11\n\x06\x61mount\x18\x01 \x01(\x04:\x01\x30\x12\x0e\n\x06script\x18\x02 \x02(\x0c\"\xa3\x01\n\x0ePaymentDetails\x12\x15\n\x07network\x18\x01 \x01(\t:\x04main\x12!\n\x07outputs\x18\x02 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04time\x18\x03 \x02(\x04\x12\x0f\n\x07\x65xpires\x18\x04 \x01(\x04\x12\x0c\n\x04memo\x18\x05 \x01(\t\x12\x13\n\x0bpayment_url\x18\x06 \x01(\t\x12\x15\n\rmerchant_data\x18\x07 \x01(\x0c\"\x95\x01\n\x0ePaymentRequest\x12\"\n\x17payment_details_version\x18\x01 \x01(\r:\x01\x31\x12\x16\n\x08pki_type\x18\x02 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x03 \x01(\x0c\x12\"\n\x1aserialized_payment_details\x18\x04 \x02(\x0c\x12\x11\n\tsignature\x18\x05 \x01(\x0c\"\'\n\x10X509Certificates\x12\x13\n\x0b\x63\x65rtificate\x18\x01 \x03(\x0c\"i\n\x07Payment\x12\x15\n\rmerchant_data\x18\x01 \x01(\x0c\x12\x14\n\x0ctransactions\x18\x02 \x03(\x0c\x12#\n\trefund_to\x18\x03 \x03(\x0b\x32\x10.payments.Output\x12\x0c\n\x04memo\x18\x04 \x01(\t\">\n\nPaymentACK\x12\"\n\x07payment\x18\x01 \x02(\x0b\x32\x11.payments.Payment\x12\x0c\n\x04memo\x18\x02 \x01(\t\"\xa3\x01\n\x0eInvoiceRequest\x12\x19\n\x11sender_public_key\x18\x01 \x02(\x0c\x12\x11\n\x06\x61mount\x18\x02 \x01(\x04:\x01\x30\x12\x16\n\x08pki_type\x18\x03 \x01(\t:\x04none\x12\x10\n\x08pki_data\x18\x04 \x01(\x0c\x12\x0c\n\x04memo\x18\x05 \x01(\t\x12\x18\n\x10notification_url\x18\x06 \x01(\t\x12\x11\n\tsignature\x18\x07 \x01(\x0c\"\xba\x01\n\x0fProtocolMessage\x12\x12\n\x07version\x18\x01 \x02(\x04:\x01\x31\x12\x16\n\x0bstatus_code\x18\x02 \x02(\x04:\x01\x31\x12\x33\n\x0cmessage_type\x18\x03 \x02(\x0e\x32\x1d.payments.ProtocolMessageType\x12\x1a\n\x12serialized_message\x18\x04 \x02(\x0c\x12\x16\n\x0estatus_message\x18\x05 \x01(\t\x12\x12\n\nidentifier\x18\x06 \x01(\x0c\"\x9c\x02\n\x18\x45ncryptedProtocolMessage\x12\x12\n\x07version\x18\x01 \x02(\x04:\x01\x31\x12\x16\n\x0bstatus_code\x18\x02 \x02(\x04:\x01\x31\x12\x33\n\x0cmessage_type\x18\x03 \x02(\x0e\x32\x1d.payments.ProtocolMessageType\x12\x19\n\x11\x65ncrypted_message\x18\x04 \x02(\x0c\x12\x1b\n\x13receiver_public_key\x18\x05 \x02(\x0c\x12\x19\n\x11sender_public_key\x18\x06 \x02(\x0c\x12\r\n\x05nonce\x18\x07 \x02(\x04\x12\x12\n\nidentifier\x18\x08 \x01(\x0c\x12\x16\n\x0estatus_message\x18\t \x01(\t\x12\x11\n\tsignature\x18\n \x01(\x0c*w\n\x13ProtocolMessageType\x12\x18\n\x14UNKNOWN_MESSAGE_TYPE\x10\x00\x12\x13\n\x0fINVOICE_REQUEST\x10\x01\x12\x13\n\x0fPAYMENT_REQUEST\x10\x02\x12\x0b\n\x07PAYMENT\x10\x03\x12\x0f\n\x0bPAYMENT_ACK\x10\x04\x42(\n\x1eorg.bitcoin.protocols.paymentsB\x06Protos')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -30,34 +30,39 @@ _PROTOCOLMESSAGETYPE = _descriptor.EnumDescriptor(
   file=DESCRIPTOR,
   values=[
     _descriptor.EnumValueDescriptor(
-      name='INVOICE_REQUEST', index=0, number=0,
+      name='UNKNOWN_MESSAGE_TYPE', index=0, number=0,
       options=None,
       type=None),
     _descriptor.EnumValueDescriptor(
-      name='PAYMENT_REQUEST', index=1, number=1,
+      name='INVOICE_REQUEST', index=1, number=1,
       options=None,
       type=None),
     _descriptor.EnumValueDescriptor(
-      name='PAYMENT', index=2, number=2,
+      name='PAYMENT_REQUEST', index=2, number=2,
       options=None,
       type=None),
     _descriptor.EnumValueDescriptor(
-      name='PAYMENT_ACK', index=3, number=3,
+      name='PAYMENT', index=3, number=3,
+      options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='PAYMENT_ACK', index=4, number=4,
       options=None,
       type=None),
   ],
   containing_type=None,
   options=None,
-  serialized_start=1205,
-  serialized_end=1298,
+  serialized_start=1251,
+  serialized_end=1370,
 )
 _sym_db.RegisterEnumDescriptor(_PROTOCOLMESSAGETYPE)
 
 ProtocolMessageType = enum_type_wrapper.EnumTypeWrapper(_PROTOCOLMESSAGETYPE)
-INVOICE_REQUEST = 0
-PAYMENT_REQUEST = 1
-PAYMENT = 2
-PAYMENT_ACK = 3
+UNKNOWN_MESSAGE_TYPE = 0
+INVOICE_REQUEST = 1
+PAYMENT_REQUEST = 2
+PAYMENT = 3
+PAYMENT_ACK = 4
 
 
 
@@ -362,42 +367,42 @@ _INVOICEREQUEST = _descriptor.Descriptor(
       options=None),
     _descriptor.FieldDescriptor(
       name='amount', full_name='payments.InvoiceRequest.amount', index=1,
-      number=3, type=4, cpp_type=4, label=1,
+      number=2, type=4, cpp_type=4, label=1,
       has_default_value=True, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
       name='pki_type', full_name='payments.InvoiceRequest.pki_type', index=2,
-      number=4, type=9, cpp_type=9, label=1,
+      number=3, type=9, cpp_type=9, label=1,
       has_default_value=True, default_value=_b("none").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
       name='pki_data', full_name='payments.InvoiceRequest.pki_data', index=3,
-      number=5, type=12, cpp_type=9, label=1,
+      number=4, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
       name='memo', full_name='payments.InvoiceRequest.memo', index=4,
-      number=6, type=9, cpp_type=9, label=1,
+      number=5, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
       name='notification_url', full_name='payments.InvoiceRequest.notification_url', index=5,
-      number=7, type=9, cpp_type=9, label=1,
+      number=6, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
       name='signature', full_name='payments.InvoiceRequest.signature', index=6,
-      number=8, type=12, cpp_type=9, label=1,
+      number=7, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -426,36 +431,43 @@ _PROTOCOLMESSAGE = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='message_type', full_name='payments.ProtocolMessage.message_type', index=0,
-      number=1, type=14, cpp_type=8, label=2,
+      name='version', full_name='payments.ProtocolMessage.version', index=0,
+      number=1, type=4, cpp_type=4, label=2,
+      has_default_value=True, default_value=1,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='status_code', full_name='payments.ProtocolMessage.status_code', index=1,
+      number=2, type=4, cpp_type=4, label=2,
+      has_default_value=True, default_value=1,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='message_type', full_name='payments.ProtocolMessage.message_type', index=2,
+      number=3, type=14, cpp_type=8, label=2,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='serialized_message', full_name='payments.ProtocolMessage.serialized_message', index=1,
-      number=2, type=12, cpp_type=9, label=2,
+      name='serialized_message', full_name='payments.ProtocolMessage.serialized_message', index=3,
+      number=4, type=12, cpp_type=9, label=2,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='status_code', full_name='payments.ProtocolMessage.status_code', index=2,
-      number=3, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='status_message', full_name='payments.ProtocolMessage.status_message', index=3,
-      number=4, type=9, cpp_type=9, label=1,
+      name='status_message', full_name='payments.ProtocolMessage.status_message', index=4,
+      number=5, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='identifier', full_name='payments.ProtocolMessage.identifier', index=4,
-      number=5, type=12, cpp_type=9, label=1,
+      name='identifier', full_name='payments.ProtocolMessage.identifier', index=5,
+      number=6, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -472,7 +484,7 @@ _PROTOCOLMESSAGE = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=776,
-  serialized_end=939,
+  serialized_end=962,
 )
 
 
@@ -484,58 +496,58 @@ _ENCRYPTEDPROTOCOLMESSAGE = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='message_type', full_name='payments.EncryptedProtocolMessage.message_type', index=0,
-      number=1, type=14, cpp_type=8, label=2,
+      name='version', full_name='payments.EncryptedProtocolMessage.version', index=0,
+      number=1, type=4, cpp_type=4, label=2,
+      has_default_value=True, default_value=1,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='status_code', full_name='payments.EncryptedProtocolMessage.status_code', index=1,
+      number=2, type=4, cpp_type=4, label=2,
+      has_default_value=True, default_value=1,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='message_type', full_name='payments.EncryptedProtocolMessage.message_type', index=2,
+      number=3, type=14, cpp_type=8, label=2,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='encrypted_message', full_name='payments.EncryptedProtocolMessage.encrypted_message', index=1,
-      number=2, type=12, cpp_type=9, label=2,
-      has_default_value=False, default_value=_b(""),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='receiver_public_key', full_name='payments.EncryptedProtocolMessage.receiver_public_key', index=2,
-      number=3, type=12, cpp_type=9, label=2,
-      has_default_value=False, default_value=_b(""),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='sender_public_key', full_name='payments.EncryptedProtocolMessage.sender_public_key', index=3,
+      name='encrypted_message', full_name='payments.EncryptedProtocolMessage.encrypted_message', index=3,
       number=4, type=12, cpp_type=9, label=2,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='nonce', full_name='payments.EncryptedProtocolMessage.nonce', index=4,
-      number=5, type=4, cpp_type=4, label=2,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='signature', full_name='payments.EncryptedProtocolMessage.signature', index=5,
-      number=6, type=12, cpp_type=9, label=1,
+      name='receiver_public_key', full_name='payments.EncryptedProtocolMessage.receiver_public_key', index=4,
+      number=5, type=12, cpp_type=9, label=2,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='identifier', full_name='payments.EncryptedProtocolMessage.identifier', index=6,
-      number=7, type=12, cpp_type=9, label=1,
+      name='sender_public_key', full_name='payments.EncryptedProtocolMessage.sender_public_key', index=5,
+      number=6, type=12, cpp_type=9, label=2,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='status_code', full_name='payments.EncryptedProtocolMessage.status_code', index=7,
-      number=8, type=4, cpp_type=4, label=1,
+      name='nonce', full_name='payments.EncryptedProtocolMessage.nonce', index=6,
+      number=7, type=4, cpp_type=4, label=2,
       has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='identifier', full_name='payments.EncryptedProtocolMessage.identifier', index=7,
+      number=8, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
@@ -543,6 +555,13 @@ _ENCRYPTEDPROTOCOLMESSAGE = _descriptor.Descriptor(
       name='status_message', full_name='payments.EncryptedProtocolMessage.status_message', index=8,
       number=9, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='signature', full_name='payments.EncryptedProtocolMessage.signature', index=9,
+      number=10, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
@@ -557,8 +576,8 @@ _ENCRYPTEDPROTOCOLMESSAGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=942,
-  serialized_end=1203,
+  serialized_start=965,
+  serialized_end=1249,
 )
 
 _PAYMENTDETAILS.fields_by_name['outputs'].message_type = _OUTPUT
