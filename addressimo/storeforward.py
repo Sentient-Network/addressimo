@@ -48,12 +48,16 @@ class StoreForward:
 
     @staticmethod
     @requires_valid_signature
-    def register():
+    def register(**kwargs):
 
         resolver = PluginManager.get_plugin('RESOLVER', config.resolver_type)
 
         id_obj = IdObject()
         id_obj.auth_public_key = request.headers.get('x-identity')
+
+        for k,v in kwargs.items():
+            setattr(id_obj, k, v)
+
         resolver.save(id_obj)
 
         return create_json_response(data={'id': id_obj.id, 'endpoint': 'https://%s/address/%s/resolve' % (config.site_url, id_obj.id)})

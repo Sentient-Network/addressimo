@@ -106,6 +106,11 @@ def sf_getcount(id):
 
 
 # BIP75 Payment Protocol Endpoints
+@app.route('/address', methods=['POST'])
+@limiter.limit("2 per minute")
+def register_bip75_endpoint():
+    return StoreForward.register(paymentprotocol_only=True)
+
 @app.route('/address/<id>/paymentprotocol', methods=['GET'])
 @limiter.limit("10 per minute")
 def get_pp_messages(id):

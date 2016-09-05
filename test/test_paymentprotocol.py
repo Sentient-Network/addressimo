@@ -103,6 +103,8 @@ class TestValidateEncryptedMessage(AddressimoTestCase):
 
         # Setup Base EPM
         self.epm = EncryptedProtocolMessage()
+        self.epm.version = 1
+        self.epm.status_code = 1
         self.epm.sender_public_key = self.sender_sk.get_verifying_key().to_der()
         self.epm.receiver_public_key = self.receiver_sk.get_verifying_key().to_der()
         self.epm.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
@@ -210,6 +212,8 @@ class TestParsePaymentProtocolMessage(AddressimoTestCase):
     def setUp(self):
 
         self.epm = EncryptedProtocolMessage()
+        self.epm.version = 1
+        self.epm.status_code = 1
         self.epm.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
         self.epm.encrypted_message = 'deadbeef'
         self.epm.sender_public_key = 'deadbeef'
@@ -218,6 +222,8 @@ class TestParsePaymentProtocolMessage(AddressimoTestCase):
         self.epm.identifier = 'epm_identifier'
 
         self.pm = ProtocolMessage()
+        self.pm.version = 1
+        self.pm.status_code = 1
         self.pm.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
         self.pm.serialized_message = 'deadbeef'
         self.pm.identifier = 'pm_identifier'
@@ -256,6 +262,8 @@ class TestGetPaymentProtocolMessages(AddressimoTestCase):
         self.mockVerifyPublicKey.return_value = None
 
         self.epm = EncryptedProtocolMessage()
+        self.epm.version = 1
+        self.epm.status_code = 1
         self.epm.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
         self.epm.encrypted_message = 'deadbeef'
         self.epm.sender_public_key = 'deadbeef'
@@ -263,6 +271,8 @@ class TestGetPaymentProtocolMessages(AddressimoTestCase):
         self.epm.nonce = 42
 
         self.pm = ProtocolMessage()
+        self.pm.version = 1
+        self.pm.status_code = 1
         self.pm.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
         self.pm.serialized_message = 'deadbeef'
 

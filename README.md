@@ -475,13 +475,40 @@ The "id" returned in the POST call will need to be used for any further access t
             "utime": 1452797108831686
         }
 
-## Payment Protocol Store and Forward Endpoint [/address/{id}/paymentprotocol]
+## Payment Protocol Store and Forward Endpoint [/address]
 
 **NOTE:** Some endpoints **[REQUIRE AUTHENTICATION](#auth-anchor)**
 
 This endpoint supports the full BIP 75 implementation. All ProtocolMessage and EncryptedProtocolMessage messages require use of the identifier field to uniquely identify the transaction. Additionally, the signature field is required by *Addressimo*.
 
-### Retrieve Payment Protocol Messages [GET]
+### Register Store & Forward Endpoint [POST]
+
+Create a BIP75 Store & Forward Endpoint.
+
++ Request (application/json)
+
+    + Headers
+
+            X-Identity: "HEX ENCODED ECDSA PUBLIC KEY"
+            X-Signature: "HEX ENCODED ECDSA MESSAGE SIGNATURE"
+
++ Response 200 (application/json)
+
+        {
+            "success": true,
+            "message": "",
+            "id': "newly_created_endpoint_id",
+            "endpoint": "https://site_url/address/newly_created_endpoint_id/resolve"
+        }
+        
++ Response 500 (application/json)
+
+        {
+            "success": false,
+            "message": "error_message"
+        }
+
+### Retrieve Payment Protocol Messages [GET /address/{id}/paymentprotocol]
 
 Retrieve stored Payment Protocol messages for the given endpoint.
 
@@ -525,7 +552,7 @@ Retrieve stored Payment Protocol messages for the given endpoint.
             "message": "Exception Occurred, Please Try Again Later."
         }
 
-### Submit Payment Protocol Message [POST]
+### Submit Payment Protocol Message [POST /address/{id}/paymentprotocol]
 Submit Payment Protocol messages (ProtocolMessage / EncryptedProtocolMessage) to a given endpoint. Per BIP75, error communication is handled completely within the Protocol Messages using status_code and status_message to comunicate the error.
 
 + Parameters

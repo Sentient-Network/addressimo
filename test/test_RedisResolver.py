@@ -405,6 +405,8 @@ class TestAddPaymentProtocolMessage(AddressimoTestCase):
         self.mockGenerateUniqueId.return_value = 'unique_id'
 
         self.message = EncryptedProtocolMessage()
+        self.message.version = 1
+        self.message.status_code = 1
         self.message.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
         self.message.encrypted_message = 'deadbeef'
         self.message.receiver_public_key = 'deadbeef'
@@ -413,6 +415,8 @@ class TestAddPaymentProtocolMessage(AddressimoTestCase):
         self.message.nonce = 42
 
         self.non_encrypted_message = ProtocolMessage()
+        self.non_encrypted_message.version = 1
+        self.non_encrypted_message.status_code = 1
         self.non_encrypted_message.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
         self.non_encrypted_message.serialized_message = 'deadbeef'
         self.non_encrypted_message.identifier = 'msg_identifier'
@@ -546,6 +550,8 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
         # Setup Protocol Messages
         self.message = EncryptedProtocolMessage()
+        self.message.version = 1
+        self.message.status_code = 1
         self.message.message_type = ProtocolMessageType.Value('PAYMENT_REQUEST')
         self.message.encrypted_message = 'deadbeef'
         self.message.receiver_public_key = 'deadbeef'
@@ -554,6 +560,8 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.message.nonce = 42
 
         self.non_encrypted_message = ProtocolMessage()
+        self.non_encrypted_message.version = 1
+        self.non_encrypted_message.status_code = 1
         self.non_encrypted_message.message_type = ProtocolMessageType.Value('INVOICE_REQUEST')
         self.non_encrypted_message.serialized_message = 'deadbeef'
         self.non_encrypted_message.identifier = 'msg_identifier'

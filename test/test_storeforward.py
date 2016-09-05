@@ -146,12 +146,13 @@ class TestRegister(AddressimoTestCase):
 
     def test_go_right(self):
 
-        StoreForward.register()
+        StoreForward.register(key='value')
 
         self.assertEqual(1, self.mockPluginManager.get_plugin.call_count)
         self.assertEqual('RESOLVER', self.mockPluginManager.get_plugin.call_args[0][0])
         self.assertEqual(1, self.mockIdObject.call_count)
         self.assertEqual(TEST_PUBKEY, self.mockIdObject.return_value.auth_public_key)
+        self.assertEqual('value', self.mockIdObject.return_value.key)
         self.assertEqual(1, self.mockPluginManager.get_plugin.return_value.save.call_count)
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertEqual({'id': 'my_id', 'endpoint': 'https://%s/address/my_id/resolve' % config.site_url}, self.mockCreateJsonResponse.call_args[1]['data'])
