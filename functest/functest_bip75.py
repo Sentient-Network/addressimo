@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from ecdsa import SigningKey, curves, VerifyingKey
 from ecdsa.util import sigdecode_der, sigencode_der
 from flask.ext.testing import LiveServerTestCase
+from hashlib import sha256
 from OpenSSL import crypto
 from Crypto.Cipher import AES
 from cryptography.hazmat.primitives.ciphers import (
@@ -199,6 +200,32 @@ class BIP75FunctionalTest(LiveServerTestCase):
         log.info('Deleting Test IdObj')
         resolver.delete(BIP75FunctionalTest.test_id_obj)
 
+    def register_endpoint(self):
+
+        log.info('Registering Addressimo Endpoint')
+
+        url = '%s/address' % self.get_server_url()
+        headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': BIP75FunctionalTest.receiver_sk.sign(url, hashfunc=hashlib.sha256, sigencode=sigencode_der).encode('hex')
+        }
+
+        response = requests.post(url, headers=headers)
+
+        rdata = response.json()
+        self.addressimo_endpoint_id = str(rdata.get('id'))
+
+    def cleanup_endpoint(self):
+
+        log.info('Cleaning Up Registered Addressimo Endpoint [ID: %s]' % self.addressimo_endpoint_id)
+
+        url = '%s/address/%s/sf' % (self.get_server_url(), self.addressimo_endpoint_id)
+        headers = {
+            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Signature': BIP75FunctionalTest.receiver_sk.sign(url, hashfunc=hashlib.sha256, sigencode=sigencode_der).encode('hex')
+        }
+        requests.delete(url, headers=headers)
+
     def long_to_bytes(self, val, endianness='big'):
         width = val.bit_length()
         width += 8 - ((width % 8) or 8)
@@ -351,6 +378,11 @@ class BIP75FunctionalTest(LiveServerTestCase):
         self.x509_receiver_cert = crypto.load_certificate(crypto.FILETYPE_PEM, RECEIVER_CERT)
         self.x509_receiver_cert_privkey = crypto.load_privatekey(crypto.FILETYPE_PEM, RECEIVER_CERT_PRIVKEY)
 
+        ################################
+        # Register Addressimo Endpoint
+        ################################
+        self.register_endpoint()
+
         #########################
         # Create InvoiceRequest
         #########################
@@ -368,7 +400,7 @@ class BIP75FunctionalTest(LiveServerTestCase):
         invoice_request.signature = ""
 
         # Handle x509 Signature
-        sig = crypto.sign(self.x509_sender_cert_privkey, invoice_request.SerializeToString(), 'sha1')
+        sig = crypto.sign(self.x509_sender_cert_privkey, invoice_request.SerializeToString(), 'sha256')
         invoice_request.signature = sig
 
         ##################################
@@ -386,8 +418,8 @@ class BIP75FunctionalTest(LiveServerTestCase):
         #############################
         # Sign & Submit HTTP Request
         #############################
-        post_url = "%s/address/testid/resolve" % self.get_server_url()
-        msg_sig = BIP75FunctionalTest.sender_sk.sign(post_url + eir.SerializeToString())
+        post_url = "%s/address/%s/resolve" % (self.get_server_url(), self.addressimo_endpoint_id)
+        msg_sig = BIP75FunctionalTest.sender_sk.sign(post_url + eir.SerializeToString(), hashfunc=sha256, sigencode=sigencode_der)
 
         ir_headers = {
             'X-Identity': BIP75FunctionalTest.sender_sk.get_verifying_key().to_der().encode('hex'),
@@ -407,8 +439,8 @@ class BIP75FunctionalTest(LiveServerTestCase):
         ###############################################
         # Get Pending InvoiceRequests from Addressimo
         ###############################################
-        sign_url = "%s/address/testid/paymentprotocol" % self.get_server_url()
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url)
+        sign_url = "%s/address/%s/paymentprotocol" % (self.get_server_url(), self.addressimo_endpoint_id)
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url, hashfunc=sha256, sigencode=sigencode_der)
 
         ir_req_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
@@ -465,7 +497,7 @@ class BIP75FunctionalTest(LiveServerTestCase):
         pr.serialized_payment_details = pd.SerializeToString()
         pr.signature = ''
 
-        sig = crypto.sign(self.x509_receiver_cert_privkey, pr.SerializeToString(), 'sha1')
+        sig = crypto.sign(self.x509_receiver_cert_privkey, pr.SerializeToString(), 'sha256')
         pr.signature = sig
 
         log.info('Encapsulating PaymentRequest in EncryptedProtocolMessage')
@@ -477,8 +509,8 @@ class BIP75FunctionalTest(LiveServerTestCase):
             identifier=BIP75FunctionalTest.identifier
         )
 
-        sign_url = "%s/address/testid/paymentprotocol" % self.get_server_url()
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url + epr.SerializeToString())
+        sign_url = "%s/address/%s/paymentprotocol" % (self.get_server_url(), self.addressimo_endpoint_id)
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url + epr.SerializeToString(), hashfunc=sha256, sigencode=sigencode_der)
 
         ir_req_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
@@ -494,8 +526,9 @@ class BIP75FunctionalTest(LiveServerTestCase):
 
         ##############################################################################
         # Delete InvoiceRequest after the PaymentRequest was submitted successfully
-        delete_url = "%s/address/testid/paymentprotocol/%s/invoice_request" % (self.get_server_url(), received_eir.identifier.encode('hex'))
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url)
+        ##############################################################################
+        delete_url = "%s/address/%s/paymentprotocol/%s/invoice_request" % (self.get_server_url(), self.addressimo_endpoint_id, received_eir.identifier.encode('hex'))
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url, hashfunc=sha256, sigencode=sigencode_der)
 
         ir_delete_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
@@ -510,9 +543,9 @@ class BIP75FunctionalTest(LiveServerTestCase):
         log.info("Retrieving PaymentRequest")
 
         sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url)
+        msg_sig = BIP75FunctionalTest.sender_sk.sign(sign_url, hashfunc=sha256, sigencode=sigencode_der)
         get_message_headers = {
-            'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
+            'X-Identity': BIP75FunctionalTest.sender_sk.get_verifying_key().to_der().encode('hex'),
             'X-Signature': msg_sig.encode('hex')
         }
         response = requests.get(sign_url, headers=get_message_headers)
@@ -564,7 +597,7 @@ class BIP75FunctionalTest(LiveServerTestCase):
 
         # Submit Payment
         sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
-        msg_sig = BIP75FunctionalTest.sender_sk.sign(sign_url + encrypted_payment.SerializeToString())
+        msg_sig = BIP75FunctionalTest.sender_sk.sign(sign_url + encrypted_payment.SerializeToString(), hashfunc=sha256, sigencode=sigencode_der)
 
         ep_req_headers = {
             'X-Identity': BIP75FunctionalTest.sender_sk.get_verifying_key().to_der().encode('hex'),
@@ -580,8 +613,9 @@ class BIP75FunctionalTest(LiveServerTestCase):
 
         ##############################################################################
         # Delete PaymentRequest after the Payment was submitted successfully
+        ##############################################################################
         delete_url = "%s/paymentprotocol/%s/%s/payment_request" % (self.get_server_url(), self.payment_id, received_eir.identifier.encode('hex'))
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url)
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url, hashfunc=sha256, sigencode=sigencode_der)
 
         ir_delete_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
@@ -596,7 +630,7 @@ class BIP75FunctionalTest(LiveServerTestCase):
         log.info("Retrieving Payment")
 
         sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url)
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url, hashfunc=sha256, sigencode=sigencode_der)
         get_message_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
             'X-Signature': msg_sig.encode('hex')
@@ -646,7 +680,7 @@ class BIP75FunctionalTest(LiveServerTestCase):
 
         # Submit PaymentAck
         sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url + encrypted_paymentack.SerializeToString())
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url + encrypted_paymentack.SerializeToString(), hashfunc=sha256, sigencode=sigencode_der)
 
         ep_req_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
@@ -662,8 +696,9 @@ class BIP75FunctionalTest(LiveServerTestCase):
 
         ##############################################################################
         # Delete Payment after the PaymentACK was submitted successfully
-        delete_url = "%s/address/testid/paymentprotocol/%s/payment" % (self.get_server_url(), received_eir.identifier.encode('hex'))
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url)
+        ##############################################################################
+        delete_url = "%s/address/%s/paymentprotocol/%s/payment" % (self.get_server_url(), self.addressimo_endpoint_id, received_eir.identifier.encode('hex'))
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url, hashfunc=sha256, sigencode=sigencode_der)
 
         ir_delete_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
@@ -677,7 +712,7 @@ class BIP75FunctionalTest(LiveServerTestCase):
         ###############################
         log.info("Retrieving EncryptedPaymentAck")
         sign_url = "%s/paymentprotocol/%s" % (self.get_server_url(), self.payment_id)
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url)
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(sign_url, hashfunc=sha256, sigencode=sigencode_der)
         get_message_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
             'X-Signature': msg_sig.encode('hex')
@@ -709,8 +744,9 @@ class BIP75FunctionalTest(LiveServerTestCase):
 
         ##############################################################################
         # Delete PaymentACK after the PaymentACK was retrieved successfully
-        delete_url = "%s/address/testid/paymentprotocol/%s/payment_ack" % (self.get_server_url(), received_eir.identifier.encode('hex'))
-        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url)
+        ##############################################################################
+        delete_url = "%s/address/%s/paymentprotocol/%s/payment_ack" % (self.get_server_url(), self.addressimo_endpoint_id, received_eir.identifier.encode('hex'))
+        msg_sig = BIP75FunctionalTest.receiver_sk.sign(delete_url, hashfunc=sha256, sigencode=sigencode_der)
 
         ir_delete_headers = {
             'X-Identity': BIP75FunctionalTest.receiver_sk.get_verifying_key().to_der().encode('hex'),
@@ -718,6 +754,11 @@ class BIP75FunctionalTest(LiveServerTestCase):
         }
         response = requests.delete(delete_url, headers=ir_delete_headers)
         self.assertEqual(response.status_code, requests.codes.no_content)
+
+        ################################
+        # Delete Addressimo Endpoint
+        ################################
+        self.cleanup_endpoint()
 
 if __name__ == '__main__':
 

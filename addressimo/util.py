@@ -11,8 +11,10 @@ from datetime import datetime
 from ecdsa import curves
 from ecdsa.der import UnexpectedDER
 from ecdsa.keys import VerifyingKey, BadDigestError, BadSignatureError
+from ecdsa.util import sigdecode_der
 from flask import request, current_app, Response
 from functools import wraps
+from hashlib import sha256
 from time import mktime
 from urlparse import urlparse
 
@@ -144,7 +146,7 @@ def requires_valid_signature(f):
             return create_json_response(False, 'Bad Public Key Format', 400)
 
         try:
-            verified = vk.verify(sig.decode('hex'), str(request.url) + str(request.data))
+            verified = vk.verify(sig.decode('hex'), str(request.url) + str(request.data), hashfunc=sha256, sigdecode=sigdecode_der)
             if verified:
                 return f(*args, **kwargs)
             else:

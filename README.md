@@ -199,10 +199,10 @@ If you're interested in reading through Bitpay's API documentation regarding the
 can be found [here](https://bitpay.com/api#making-requests).
 
 All requests require both the X-Identity and X-Signature headers to be present and valid. The X-Identity header is the hex-encoded
-ECDSA public key (DER encoded) for the private key that was used to sign the request. The X-Signature header is the hex-encoded ECDSA signature
-of the message that is computed as follows:
+ECDSA public key (DER encoded) for the private key that was used to sign the request. The X-Signature header is the hex-encoded, DER-formatted ECDSA signature
+of the message (using SHA256 as the sign digest) that is computed as follows:
 
-privkey.sign( **url** + **request data content** )
+privkey.sign( **url** + **request data content**, hashfunc=sha256, sigencode=sigencode_der)
 
 For example, when submitting the following request data to https://addressimo.netki.com/address/longUuid/resolve:
 

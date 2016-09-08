@@ -24,7 +24,7 @@ config.old_nonce_cleanup_size = 1000
 config.paymentprotocol_message_expiration_days = 7
 
 # Operational Modes
-config.store_and_forward_only = False
+config.store_and_forward_only = True
 
 # Presigned Payment Request
 config.presigned_pr_limit = 100

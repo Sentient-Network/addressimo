@@ -11,6 +11,7 @@ from addressimo.plugin import PluginManager
 from addressimo.paymentprotocol.paymentrequest_pb2 import Output, PaymentRequest, PaymentDetails, Payment, PaymentACK
 from addressimo.util import LogUtil
 from ecdsa import SigningKey, curves
+from ecdsa.util import sigencode_der
 from pybitcointools import *
 from server import app
 from redis import Redis
@@ -82,6 +83,7 @@ TWeo5LnGCgNnyl/Mfte1mYjJLJ/A1QAK/NEpddrF2TNMzOiVw9cBWQ==
 -----END RSA PRIVATE KEY-----
 '''
 
+# NOTE: For this to work, config.store_and_forward_only must be set to False and the bitcoin address cache must be updated
 
 class PRFunctionalTest(LiveServerTestCase):
 
@@ -225,7 +227,7 @@ class PRFunctionalTest(LiveServerTestCase):
     def get_refund_addresses(self):
 
         refund_url = '%s/payment/%s/refund/testtxhash' % (self.get_server_url(), self.test_id_obj.id)
-        msg_sig = self.receiver_sk.sign(refund_url)
+        msg_sig = self.receiver_sk.sign(refund_url, hashfunc=sha256, sigencode=sigencode_der)
 
         headers = {
             'x-identity': self.receiver_sk.get_verifying_key().to_string().encode('hex'),
