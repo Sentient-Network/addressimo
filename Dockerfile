@@ -2,7 +2,7 @@ FROM ubuntu:14.04
 MAINTAINER Netki Opensource <opensource@netki.com>
 ARG REDISURI=redis://localhost:6379
 
-# Install Required Libraries
+# Install Required Libraries (Ubuntu)
 RUN apt-get update && apt-get install -y \
     git \
     locales \
