@@ -1,5 +1,6 @@
 __author__ = 'Matt David'
 
+from ecdsa.util import sigencode_der
 from mock import patch, Mock, MagicMock
 from test import AddressimoTestCase
 
@@ -333,8 +334,8 @@ class TestRequiresValidSignature(AddressimoTestCase):
         from ecdsa.keys import SigningKey
         from ecdsa.curves import SECP256k1
 
-        sk = SigningKey.from_string(TEST_PRIVKEY.decode('hex'), curve=SECP256k1)
-        sig = sk.sign(self.mockRequest.url + self.mockRequest.data)
+        self.sk = SigningKey.from_string(TEST_PRIVKEY.decode('hex'), curve=SECP256k1)
+        sig = self.sk.sign(self.mockRequest.url + self.mockRequest.data, hashfunc=sha256, sigencode=sigencode_der)
 
         self.mockRequest.headers = {
             'x-identity': VerifyingKey.from_string(TEST_PUBKEY.decode('hex'), curve=curves.SECP256k1).to_der().encode('hex'),
@@ -402,7 +403,7 @@ class TestRequiresValidSignature(AddressimoTestCase):
 
     def test_bad_signature(self):
 
-        self.mockRequest.headers['x-signature'] = 'thisreallydoesntwork,butihopeyouthinkitdoesfdfdfd423324fff5555FF'.encode('hex')
+        self.mockRequest.headers['x-signature'] = self.sk.sign('NOT WORKING' + self.mockRequest.url + self.mockRequest.data, hashfunc=sha256, sigencode=sigencode_der).encode('hex')
 
         self.decorated()
 
