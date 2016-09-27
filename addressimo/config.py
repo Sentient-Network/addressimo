@@ -1,6 +1,7 @@
 __author__ = 'mdavid'
 
 from attrdict import AttrDict
+import os
 
 # Addressimo Configuration
 config = AttrDict()
@@ -37,16 +38,20 @@ config.plugin_directories = [
     'signer'
 ]
 
+redis_uri = 'redis://localhost:6379'
+if 'ADDRESSIMO_REDIS_URI' in os.environ:
+    redis_uri = os.environ['ADDRESSIMO_REDIS_URI']
+
 # Redis Setup
-config.redis_id_obj_uri = 'redis://localhost:6379/1'
-config.redis_tx_map_uri = 'redis://localhost:6379/2'
-config.redis_tx_uri = 'redis://localhost:6379/3'
-config.redis_pr_store = 'redis://localhost:6379/3'
-config.redis_payment_store = 'redis://localhost:6379/4'
-config.redis_logdb_uri = 'redis://localhost:6379/6'
-config.redis_address_branch_uri = 'redis://localhost:6379/13'
-config.redis_addr_cache_uri = 'redis://localhost:6379/14'
-config.redis_ratelimit_uri = 'redis://localhost:6379/15'
+config.redis_id_obj_uri = '%s/1' % redis_uri
+config.redis_tx_map_uri = '%s/2' % redis_uri
+config.redis_tx_uri = '%s/3' % redis_uri
+config.redis_pr_store = '%s/3' % redis_uri
+config.redis_payment_store = '%s/4' % redis_uri
+config.redis_logdb_uri = '%s/6' % redis_uri
+config.redis_address_branch_uri = '%s/13' % redis_uri
+config.redis_addr_cache_uri = '%s/14' % redis_uri
+config.redis_ratelimit_uri = '%s/15' % redis_uri
 
 # Object Configuration
 config.resolver_type = 'REDIS'
