@@ -42,21 +42,25 @@ Quite simply, a wallet can receive different address types just by making an add
 * [BIP 75](#bip75-anchor) 
 
 <a name="static-anchor"/>
+
 A **Static Address** is a single, non-changing address. Due to the potential for privacy leaks, it is generally not considered best practice to use static addresses,
  but some wallets may only support a single, static address.
 
 <a name="bip32-anchor"/>
+
 **BIP0032** address generation is based on an extended master public key as well as a Redis-stored blockchain used *address
 cache* that is maintained via a cronjob. If an address has been used in a transaction output on the blockchain, the next
 index will be tried for *[BIP0032](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)* wallet address generation.
 
 <a name="pr-anchor"/>
+
 **BIP0070 PaymentRequest** generation can use wallet addresses based on a *static wallet address* or a 
 *[BIP0032](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)* wallet address that is generated based 
 on the logic previously explained. *[BIP0070 PaymentRequests](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki)* are 
 created and signed on demand using the endpoint's configured private key (or configured signer plugin) and x509 cert.
 
 <a name="bituri-anchor"/>
+
 The **Bitcoin URI** is defined in [BIP0021](https://github.com/bitcoin/bips/blob/master/bip-0021.mediawiki), with extensions
  defined in [BIP0072](https://github.com/bitcoin/bips/blob/master/bip-0072.mediawiki) in order to support 
  [BIP0070](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) PaymentRequests and later PaymentRequest extensions. 
