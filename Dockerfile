@@ -1,6 +1,8 @@
 FROM ubuntu:14.04
 MAINTAINER Netki Opensource <opensource@netki.com>
 ARG REDISURI=redis://localhost:6379
+ARG SSL_CERT
+ARG SSL_KEYFILE
 
 # Install Required Libraries (Ubuntu)
 RUN apt-get update && apt-get install -y \
@@ -43,13 +45,17 @@ RUN chown addressimo:addressimo /var/log/addressimo
 # file management, everything after an ADD is uncached, so we do it as late as possible in the process.
 ADD ./etc/supervisord.conf /etc/supervisord.conf
 ADD ./etc/nginx.conf /etc/nginx/nginx.conf
+ADD ./etc/ssl/${SSL_CERT} /etc/ssl/addressimo.crt
+ADD ./etc/ssl/${SSL_KEYFILE} /etc/ssl/addressimo.key
+RUN chmod 400 /etc/ssl/addressimo.crt
+RUN chmod 400 /etc/ssl/addressimo.key
 
 # restart nginx to load the config
 RUN service nginx stop
 RUN service redis-server stop
 
-EXPOSE 80
+EXPOSE 80 443
 
 # start supervisor to run our wsgi server
-CMD supervisord -c /etc/supervisord.conf -n
+ENTRYPOINT ["supervisord", "-c", "/etc/supervisord.conf", "-n"]
 
