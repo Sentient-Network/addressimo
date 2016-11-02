@@ -48,7 +48,7 @@ def create_json_response(success=True, message='', status=200, data={}, headers=
 
     default_headers = {
         'Access-Control-Allow-Methods': ', '.join(allow_methods),
-        'Access-Control-Allow-Headers': 'X-Identity, X-Signature, X-Requested-With, accept, content-type'
+        'Access-Control-Allow-Headers': 'X-Identity, X-Signature, X-Requested-With, accept, content-type, Content-Transfer-Encoding'
     }
 
     if origin_value:
