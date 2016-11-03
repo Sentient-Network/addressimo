@@ -227,7 +227,7 @@ class PRFunctionalTest(LiveServerTestCase):
     def get_refund_addresses(self):
 
         refund_url = '%s/payment/%s/refund/testtxhash' % (self.get_server_url(), self.test_id_obj.id)
-        msg_sig = self.receiver_sk.sign(refund_url, hashfunc=sha256, sigencode=sigencode_der)
+        msg_sig = self.receiver_sk.sign('GET' + refund_url.replace('http://'), hashfunc=sha256, sigencode=sigencode_der)
 
         headers = {
             'x-identity': self.receiver_sk.get_verifying_key().to_string().encode('hex'),

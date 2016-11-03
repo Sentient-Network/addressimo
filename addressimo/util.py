@@ -146,7 +146,8 @@ def requires_valid_signature(f):
             return create_json_response(False, 'Bad Public Key Format', 400)
 
         try:
-            verified = vk.verify(sig.decode('hex'), str(request.url) + str(request.data), hashfunc=sha256, sigdecode=sigdecode_der)
+            url = request.headers['host'].rstrip('/') + request.path
+            verified = vk.verify(sig.decode('hex'), str(request.method) + str(url) + str(request.data), hashfunc=sha256, sigdecode=sigdecode_der)
             if verified:
                 return f(*args, **kwargs)
             else:
