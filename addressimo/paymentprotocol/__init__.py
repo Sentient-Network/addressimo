@@ -345,7 +345,7 @@ def process_invoicerequest(message, id):
                     sig_validate_ir = InvoiceRequest()
                     sig_validate_ir.ParseFromString(message.serialized_message)
                     sig_validate_ir.signature = ""
-                    crypto.verify(cert, invoice_request.signature, sig_validate_ir.SerializeToString(), 'sha1')
+                    crypto.verify(cert, invoice_request.signature, sig_validate_ir.SerializeToString(), 'sha256')
                     log.info("InvoiceRequest Signature is Valid")
                 except Exception as e:
                     log.info('Bad Signature Encountered During Signature Validation [ID: %s]: %s' % (id, str(e)))
