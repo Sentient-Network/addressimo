@@ -349,7 +349,7 @@ def process_invoicerequest(message, id):
                     log.info("InvoiceRequest Signature is Valid")
                 except Exception as e:
                     log.info('Bad Signature Encountered During Signature Validation [ID: %s]: %s' % (id, str(e)))
-                    return create_json_response(False, 'Signature Verification Error', 401)
+                    return create_json_response(False, 'InvoiceRequest Signature Verification Error', 401)
 
     try:
         log.info('Adding InvoiceRequest %s' % id)
