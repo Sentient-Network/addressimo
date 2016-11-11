@@ -200,9 +200,9 @@ def submit_paymentprotocol_message(id=None, tx_id=None, ignore_pubkey_verify=Fal
         log.warn('Identifier is Missing from Payment Protocol Message, Rejecting')
         return create_json_response(False, 'Payment Protocol Message Missing Required Field: identifier', 400)
 
-    if isinstance(message, ProtocolMessage) and message.message_type != ProtocolMessageType.Value('INVOICE_REQUEST'):
-        log.warn("Non-InvoiceRequest Message Send via Protocol Message")
-        return create_json_response(False, 'Only InvoiceRequest Messages May Be Send Using ProtocolMessages, all others require EncryptedProtocolMessages', 400)
+    # if isinstance(message, ProtocolMessage) and message.message_type != ProtocolMessageType.Value('INVOICE_REQUEST'):
+    #     log.warn("Non-InvoiceRequest Message Send via Protocol Message")
+    #     return create_json_response(False, 'Only InvoiceRequest Messages May Be Send Using ProtocolMessages, all others require EncryptedProtocolMessages', 400)
 
     #################################################
     # Verify Encrypted Protocol Message Signatures
