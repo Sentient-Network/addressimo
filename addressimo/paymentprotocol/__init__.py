@@ -290,11 +290,11 @@ def delete_paymentprotocol_message(identifier, message_type, id=None, tx_id=None
                     log.info('PaymentProtocol Message Delete Failure [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
                     return create_json_response(False, 'Payment Protocol Message Delete Failed, Try Again Later', 503)
 
-            elif isinstance(parsed_msg, ProtocolMessage) and parsed_msg.message_type == ProtocolMessageType.Value('INVOICE_REQUEST'):
+            elif isinstance(parsed_msg, ProtocolMessage):# TODO (RETURN UNCOMMENTED) and parsed_msg.message_type == ProtocolMessageType.Value('INVOICE_REQUEST'):
                 ir = InvoiceRequest()
                 ir.ParseFromString(parsed_msg.serialized_message)
 
-                if ir.sender_public_key == requestor_key or id == tx.get('receiver_id'):
+                if ir.sender_public_key == requestor_key or id == tx.get('receiver'):
 
                     if resolver.delete_paymentprotocol_message(identifier.decode('hex'), message_type, tx_id=transaction_id):
                         log.info('Deleted PaymentProtocol Message [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
@@ -358,9 +358,9 @@ def process_invoicerequest(message, id):
             log.error("Unexpected Add InvoiceRequest Failure [ID: %s]" % (id))
             return create_json_response(False, 'Unknown System Error, Please Try Again Later', 503)
 
-        pp_tx_url = 'https://%s/paymentprotocol/%s' % (config.site_url, ret_tx_id)
+        pp_tx_url = '%s/paymentprotocol/%s' % (request.host_url.rstrip('/'), ret_tx_id)
         log.debug('Accepted InvoiceRequest [ID: %s]' % id)
-        return create_json_response(status=202, headers={'Location':pp_tx_url})
+        return create_json_response(status=202, headers={'Access-Control-Expose-Headers': 'Location', 'Location':pp_tx_url})
     except Exception as e:
         log.error("Unexpected exception adding InvoiceRequest [ID: %s]: %s" % (id, str(e)))
         return create_json_response(False, 'Unknown System Error, Please Try Again Later', 503)

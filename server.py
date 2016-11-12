@@ -142,4 +142,4 @@ def delete_pp_tx_message(tx_id, identifier, message_type):
     return delete_paymentprotocol_message(identifier, message_type, tx_id=tx_id)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)
