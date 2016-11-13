@@ -53,6 +53,8 @@ def create_json_response(success=True, message='', status=200, data={}, headers=
 
     if origin_value:
         default_headers['Access-Control-Allow-Origin'] = origin_value
+    else:
+        default_headers['Access-Control-Allow-Origin'] = '*'
 
     rdict = {}
     rdict['success'] = success
