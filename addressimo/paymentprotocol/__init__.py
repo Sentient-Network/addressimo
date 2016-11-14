@@ -22,7 +22,7 @@ from ..storeforward import requires_public_key, verify_public_key
 from ..util import requires_valid_signature, create_json_response, get_id, LogUtil, PAYMENT_SIZE_MAX
 from ..validators import *
 
-from .paymentrequest_pb2 import InvoiceRequest, X509Certificates, Payment, PaymentACK, ProtocolMessage, EncryptedProtocolMessage, ProtocolMessageType
+from .paymentrequest_pb2 import InvoiceRequest, PaymentRequest, X509Certificates, Payment, PaymentACK, ProtocolMessage, EncryptedProtocolMessage, ProtocolMessageType
 
 log = LogUtil.setup_logging()
 
@@ -291,18 +291,28 @@ def delete_paymentprotocol_message(identifier, message_type, id=None, tx_id=None
                     return create_json_response(False, 'Payment Protocol Message Delete Failed, Try Again Later', 503)
 
             elif isinstance(parsed_msg, ProtocolMessage):# TODO (RETURN UNCOMMENTED) and parsed_msg.message_type == ProtocolMessageType.Value('INVOICE_REQUEST'):
-                ir = InvoiceRequest()
-                ir.ParseFromString(parsed_msg.serialized_message)
 
-                if ir.sender_public_key == requestor_key or id == tx.get('receiver'):
+                # msg_type = parsed_msg.message_type
+                # msg_type_name = ''
 
-                    if resolver.delete_paymentprotocol_message(identifier.decode('hex'), message_type, tx_id=transaction_id):
-                        log.info('Deleted PaymentProtocol Message [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
-                        return create_json_response(True, 'Payment Protocol Message Deleted', 204)
+                # if type == ProtocolMessageType.Value('INVOICE_REQUEST'):
+                #     msg_type_name = 'InvoiceRequest'
+                #     _msg = InvoiceRequest()
+                # elif type == ProtocolMessageType.Value('PAYMENT_REQUEST'):
+                #     msg_type_name = 'PaymentRequest'
+                #     _msg = PaymentRequest()
+                #
+                # _msg.ParseFromString(parsed_msg.serialized_message)
 
-                    else:
-                        log.info('PaymentProtocol Message Delete Failure [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
-                        return create_json_response(False, 'Payment Protocol Message Delete Failed, Try Again Later', 503)
+                #if msg_type_name == 'InvoiceRequest' and _msg.sender_public_key == requestor_key or id == tx.get('receiver'):
+
+                if resolver.delete_paymentprotocol_message(identifier.decode('hex'), message_type, tx_id=transaction_id):
+                    log.info('Deleted PaymentProtocol Message [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
+                    return create_json_response(True, 'Payment Protocol Message Deleted', 204)
+
+                else:
+                    log.info('PaymentProtocol Message Delete Failure [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
+                    return create_json_response(False, 'Payment Protocol Message Delete Failed, Try Again Later', 503)
 
     return create_json_response(False, 'Matching Payment Protocol Message Not Found', 404)
 
