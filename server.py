@@ -4,6 +4,7 @@ import logging
 import time
 
 from flask import Flask, Response, request
+from flask_cors import CORS
 
 from addressimo.config import config
 from addressimo.paymentprotocol import *
@@ -21,6 +22,8 @@ app.config.update(
     RATELIMIT_STORAGE_URL=config.redis_ratelimit_uri,
     RATELIMIT_HEADERS_ENABLED=False
 )
+
+CORS(app)
 
 # ###########################################
 # Setup Pre-Request Processing

@@ -17,6 +17,7 @@ from time import sleep
 
 from ..blockchain import submit_transaction
 from ..config import config
+from ..sec_util import from_sec, to_sec
 from ..plugin import PluginManager
 from ..storeforward import requires_public_key, verify_public_key
 from ..util import requires_valid_signature, create_json_response, get_id, LogUtil, PAYMENT_SIZE_MAX
@@ -40,13 +41,13 @@ def validate_encrypted_message(msg, sig_key='sender', sig_required=False):
 
     # Verify Keys in DER Format
     try:
-        sender_key = VerifyingKey.from_der(msg.sender_public_key)
+        sender_key = from_sec(msg.sender_public_key) or VerifyingKey.from_der(msg.sender_public_key)
     except Exception as e:
         log.warn("sender_public_key NOT in DER Format")
         raise EncryptedMessageValidationError('sender_public_key not in DER format')
 
     try:
-        receiver_key = VerifyingKey.from_der(msg.receiver_public_key)
+        receiver_key = from_sec(msg.receiver_public_key) or VerifyingKey.from_der(msg.receiver_public_key)
     except Exception as e:
         log.warn("receiver_public_key NOT in DER Format")
         raise EncryptedMessageValidationError('receiver_public_key not in DER format')
@@ -215,8 +216,12 @@ def submit_paymentprotocol_message(id=None, tx_id=None, ignore_pubkey_verify=Fal
             required_identity = message.receiver_public_key
             text_identity = 'receiver'
 
+        # Determine Possible Values the sender_public_key could have
+        vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+        pk_vals = [vk.to_der().encode('hex'), to_sec(vk, False).encode('hex'), to_sec(vk, True).encode('hex')]
+
         # Verify the Sender is the message signer
-        if request.headers.get('x-identity') != required_identity.encode('hex'):
+        if required_identity.encode('hex') not in pk_vals:
             log.warn("Message %s Public Key Does Not Match X-Identity Public Key" % text_identity)
             return create_json_response(False, 'Message %s Public Key Does Not Match X-Identity Public Key' % text_identity, 400)
 
@@ -275,12 +280,13 @@ def delete_paymentprotocol_message(identifier, message_type, id=None, tx_id=None
     if tx_id:
         messages = resolver.get_paymentprotocol_messages(tx_id=tx_id)
 
-    requestor_key = request.headers.get('x-identity').decode('hex')
+    vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+    allowed_keys = [vk, to_sec(vk, False), to_sec(vk, True)]
 
     for transaction_id, tx in messages.iteritems():
         for msg in tx.get('messages', []):
             parsed_msg = parse_paymentprotocol_message(msg)
-            if isinstance(parsed_msg, EncryptedProtocolMessage) and (parsed_msg.sender_public_key == requestor_key or parsed_msg.receiver_public_key == requestor_key):
+            if isinstance(parsed_msg, EncryptedProtocolMessage) and (parsed_msg.sender_public_key in allowed_keys or parsed_msg.receiver_public_key in allowed_keys):
 
                 if resolver.delete_paymentprotocol_message(identifier.decode('hex'), message_type, tx_id=transaction_id):
                     log.info('Deleted PaymentProtocol Message [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
@@ -288,31 +294,19 @@ def delete_paymentprotocol_message(identifier, message_type, id=None, tx_id=None
 
                 else:
                     log.info('PaymentProtocol Message Delete Failure [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
-                    return create_json_response(False, 'Payment Protocol Message Delete Failed, Try Again Later', 503)
+                    return create_json_response(False, 'Payment Protocol Message Does Not Exist', 404)
 
-            elif isinstance(parsed_msg, ProtocolMessage):# TODO (RETURN UNCOMMENTED) and parsed_msg.message_type == ProtocolMessageType.Value('INVOICE_REQUEST'):
+            elif isinstance(parsed_msg, ProtocolMessage) and parsed_msg.message_type == ProtocolMessageType.Value('INVOICE_REQUEST'):
 
-                # msg_type = parsed_msg.message_type
-                # msg_type_name = ''
+                if parsed_msg.message_type == 'InvoiceRequest' and (parsed_msg.sender_public_key in allowed_keys or id == tx.get('receiver')):
 
-                # if type == ProtocolMessageType.Value('INVOICE_REQUEST'):
-                #     msg_type_name = 'InvoiceRequest'
-                #     _msg = InvoiceRequest()
-                # elif type == ProtocolMessageType.Value('PAYMENT_REQUEST'):
-                #     msg_type_name = 'PaymentRequest'
-                #     _msg = PaymentRequest()
-                #
-                # _msg.ParseFromString(parsed_msg.serialized_message)
+                    if resolver.delete_paymentprotocol_message(identifier.decode('hex'), message_type, tx_id=transaction_id):
+                        log.info('Deleted PaymentProtocol Message [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
+                        return create_json_response(True, 'Payment Protocol Message Deleted', 204)
 
-                #if msg_type_name == 'InvoiceRequest' and _msg.sender_public_key == requestor_key or id == tx.get('receiver'):
-
-                if resolver.delete_paymentprotocol_message(identifier.decode('hex'), message_type, tx_id=transaction_id):
-                    log.info('Deleted PaymentProtocol Message [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
-                    return create_json_response(True, 'Payment Protocol Message Deleted', 204)
-
-                else:
-                    log.info('PaymentProtocol Message Delete Failure [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
-                    return create_json_response(False, 'Payment Protocol Message Delete Failed, Try Again Later', 503)
+                    else:
+                        log.info('PaymentProtocol Message Delete Failure [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
+                        return create_json_response(False, 'Payment Protocol Message Delete Failed, Try Again Later', 503)
 
     return create_json_response(False, 'Matching Payment Protocol Message Not Found', 404)
 

@@ -19,6 +19,7 @@ from time import mktime
 from urlparse import urlparse
 
 from addressimo.config import config
+from addressimo.sec_util import from_sec
 
 PAYMENT_REQUEST_SIZE_MAX = 50000
 PAYMENT_SIZE_MAX = 50000
@@ -142,7 +143,8 @@ def requires_valid_signature(f):
             return create_json_response(False, 'Missing x-signature header', 400)
 
         try:
-            vk = VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+            xidentity = request.headers.get('x-identity').decode('hex')
+            vk = from_sec(xidentity) or VerifyingKey.from_der(xidentity)
         except UnexpectedDER as e:
             log.info('Bad Key Format [ID: %s]: %s' % (id, str(e)))
             return create_json_response(False, 'Bad Public Key Format', 400)
