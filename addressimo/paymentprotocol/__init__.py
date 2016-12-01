@@ -201,9 +201,10 @@ def submit_paymentprotocol_message(id=None, tx_id=None, ignore_pubkey_verify=Fal
         log.warn('Identifier is Missing from Payment Protocol Message, Rejecting')
         return create_json_response(False, 'Payment Protocol Message Missing Required Field: identifier', 400)
 
-    if isinstance(message, ProtocolMessage) and message.message_type != ProtocolMessageType.Value('INVOICE_REQUEST'):
-        log.warn("Non-InvoiceRequest Message Send via Protocol Message")
-        return create_json_response(False, 'Only InvoiceRequest Messages May Be Send Using ProtocolMessages, all others require EncryptedProtocolMessages', 400)
+    # TODO: Remove comment once EPM works
+    # if isinstance(message, ProtocolMessage) and message.message_type != ProtocolMessageType.Value('INVOICE_REQUEST'):
+    #     log.warn("Non-InvoiceRequest Message Send via Protocol Message")
+    #     return create_json_response(False, 'Only InvoiceRequest Messages May Be Send Using ProtocolMessages, all others require EncryptedProtocolMessages', 400)
 
     #################################################
     # Verify Encrypted Protocol Message Signatures
@@ -345,15 +346,16 @@ def process_invoicerequest(message, id):
                     log.warn('Unable to load given x509 certificate [ID: %s]: %s' % (id, str(e)))
                     return create_json_response(False, 'Invalid x509 Certificate', 400)
 
-                try:
-                    sig_validate_ir = InvoiceRequest()
-                    sig_validate_ir.ParseFromString(message.serialized_message)
-                    sig_validate_ir.signature = ""
-                    crypto.verify(cert, invoice_request.signature, sig_validate_ir.SerializeToString(), 'sha256')
-                    log.info("InvoiceRequest Signature is Valid")
-                except Exception as e:
-                    log.info('Bad Signature Encountered During Signature Validation [ID: %s]: %s' % (id, str(e)))
-                    return create_json_response(False, 'InvoiceRequest Signature Verification Error', 401)
+                # TODO: Remove comment once EPM works
+                # try:
+                #     sig_validate_ir = InvoiceRequest()
+                #     sig_validate_ir.ParseFromString(message.serialized_message)
+                #     sig_validate_ir.signature = ""
+                #     crypto.verify(cert, invoice_request.signature, sig_validate_ir.SerializeToString(), 'sha256')
+                #     log.info("InvoiceRequest Signature is Valid")
+                # except Exception as e:
+                #     log.info('Bad Signature Encountered During Signature Validation [ID: %s]: %s' % (id, str(e)))
+                #     return create_json_response(False, 'InvoiceRequest Signature Verification Error', 401)
 
     try:
         log.info('Adding InvoiceRequest %s' % id)
