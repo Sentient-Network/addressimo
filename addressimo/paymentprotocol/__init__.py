@@ -281,7 +281,7 @@ def delete_paymentprotocol_message(identifier, message_type, id=None, tx_id=None
         messages = resolver.get_paymentprotocol_messages(tx_id=tx_id)
 
     vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
-    allowed_keys = [vk, to_sec(vk, False), to_sec(vk, True)]
+    allowed_keys = [vk.to_der(), to_sec(vk, False), to_sec(vk, True)]
 
     for transaction_id, tx in messages.iteritems():
         for msg in tx.get('messages', []):
@@ -321,7 +321,10 @@ def process_invoicerequest(message, id):
         invoice_request.ParseFromString(message.serialized_message)
 
         # Validate Public Key
-        if request.headers.get('x-identity') != invoice_request.sender_public_key.encode('hex'):
+        vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+        allowed_keys = [vk.to_der(), to_sec(vk, False), to_sec(vk, True)]
+
+        if invoice_request.sender_public_key not in allowed_keys:
             log.warn("InvoiceRequest Public Key Does Not Match X-Identity Public Key")
             return create_json_response(False, 'InvoiceRequest Public Key Does Not Match X-Identity Public Key', 400)
 
