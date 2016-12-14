@@ -285,7 +285,13 @@ def delete_paymentprotocol_message(identifier, message_type, id=None, tx_id=None
 
     for transaction_id, tx in messages.iteritems():
         for msg in tx.get('messages', []):
+
             parsed_msg = parse_paymentprotocol_message(msg)
+
+            if parsed_msg.identifier != identifier.decode('hex'):
+                log.debug('Skipping Non-Matching Identifier [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
+                continue
+
             if isinstance(parsed_msg, EncryptedProtocolMessage) and (parsed_msg.sender_public_key in allowed_keys or parsed_msg.receiver_public_key in allowed_keys):
 
                 if resolver.delete_paymentprotocol_message(identifier.decode('hex'), message_type, tx_id=transaction_id):
