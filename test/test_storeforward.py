@@ -136,13 +136,18 @@ class TestRegister(AddressimoTestCase):
         self.patcher100 = patch('addressimo.util.get_id')
         self.patcher101 = patch('addressimo.util.VerifyingKey')
         self.patcher102 = patch('addressimo.util.request')
+        self.patcher103 = patch('addressimo.util.from_sec')
 
         self.mockGetId = self.patcher100.start()
         self.mockVerifyingKey = self.patcher101.start()
         self.mockUtilRequest = self.patcher102.start()
+        self.mockFromSec = self.patcher103.start()
 
         self.mockRequest.headers['x-signature'] = 'sigF'.encode('hex')
-        self.mockVerifyingKey.from_string.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockFromSec.return_value = None
+        self.mockUtilRequest.url = 'https://%s/path' % config.site_url
+        self.mockUtilRequest.path = '/path'
 
     def test_go_right(self):
 
@@ -191,17 +196,23 @@ class TestAdd(AddressimoTestCase):
         self.patcher100 = patch('addressimo.util.get_id')
         self.patcher101 = patch('addressimo.util.VerifyingKey')
         self.patcher102 = patch('addressimo.util.request')
+        self.patcher103 = patch('addressimo.util.from_sec')
 
         self.mockGetId = self.patcher100.start()
         self.mockVerifyingKey = self.patcher101.start()
         self.mockUtilRequest = self.patcher102.start()
+        self.mockFromSec = self.patcher103.start()
 
         self.mockRequest.headers = {
             'x-signature': 'sigF'.encode('hex'),
             'x-identity': TEST_PUBKEY
         }
 
-        self.mockVerifyingKey.from_string.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockFromSec.return_value = None
+        self.mockUtilRequest.url = 'https://%s/path' % config.site_url
+        self.mockUtilRequest.path = '/path'
+
         self.mockIdObj = Mock()
         self.mockIdObj.auth_public_key = TEST_PUBKEY
         self.mockIdObj.presigned_payment_requests = []
@@ -497,16 +508,22 @@ class TestDelete(AddressimoTestCase):
         self.patcher100 = patch('addressimo.util.get_id')
         self.patcher101 = patch('addressimo.util.VerifyingKey')
         self.patcher102 = patch('addressimo.util.request')
+        self.patcher103 = patch('addressimo.util.from_sec')
 
         self.mockGetId = self.patcher100.start()
         self.mockVerifyingKey = self.patcher101.start()
         self.mockUtilRequest = self.patcher102.start()
+        self.mockFromSec = self.patcher103.start()
 
         self.mockRequest.headers = {
             'x-signature': 'sigF'.encode('hex'),
             'x-identity': TEST_PUBKEY
         }
-        self.mockVerifyingKey.from_string.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockFromSec.return_value = None
+        self.mockUtilRequest.url = 'https://%s/path' % config.site_url
+        self.mockUtilRequest.path = '/path'
+
         self.mockIdObj = Mock()
         self.mockIdObj.auth_public_key = TEST_PUBKEY
         self.mockIdObj.presigned_payment_requests = []
@@ -574,16 +591,22 @@ class TestGetCount(AddressimoTestCase):
         self.patcher100 = patch('addressimo.util.get_id')
         self.patcher101 = patch('addressimo.util.VerifyingKey')
         self.patcher102 = patch('addressimo.util.request')
+        self.patcher103 = patch('addressimo.util.from_sec')
 
         self.mockGetId = self.patcher100.start()
         self.mockVerifyingKey = self.patcher101.start()
         self.mockUtilRequest = self.patcher102.start()
+        self.mockFromSec = self.patcher103.start()
 
         self.mockRequest.headers = {
             'x-signature': 'sigF'.encode('hex'),
             'x-identity': TEST_PUBKEY
         }
-        self.mockVerifyingKey.from_string.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockFromSec.return_value = None
+        self.mockUtilRequest.url = 'https://%s/path' % config.site_url
+        self.mockUtilRequest.path = '/path'
+
         self.mockIdObj = Mock()
         self.mockIdObj.auth_public_key = TEST_PUBKEY
         self.mockIdObj.presigned_payment_requests = ['pr1', 'pr2']

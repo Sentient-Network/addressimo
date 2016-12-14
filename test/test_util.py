@@ -49,7 +49,7 @@ class Test_create_json_response(AddressimoTestCase):
         respargs = self.mockResponse.call_args[1]
         self.assertEqual(200, respargs['status'])
         self.assertEqual('application/json', respargs['mimetype'])
-        self.assertEqual('X-Requested-With, accept, content-type', respargs['headers']['Access-Control-Allow-Headers'])
+        self.assertEqual('X-Identity, X-Signature, X-Requested-With, accept, content-type, Content-Transfer-Encoding', respargs['headers']['Access-Control-Allow-Headers'])
         self.assertEqual('PUT, POST, OPTIONS', respargs['headers']['Access-Control-Allow-Methods'])
         self.assertEqual('http://127.0.0.1', respargs['headers']['Access-Control-Allow-Origin'])
         self.assertEqual('w00t', respargs['headers']['X-Random'])
@@ -70,7 +70,7 @@ class Test_create_json_response(AddressimoTestCase):
         respargs = self.mockResponse.call_args[1]
         self.assertEqual(200, respargs['status'])
         self.assertEqual('application/json', respargs['mimetype'])
-        self.assertEqual('X-Requested-With, accept, content-type', respargs['headers']['Access-Control-Allow-Headers'])
+        self.assertEqual('X-Identity, X-Signature, X-Requested-With, accept, content-type, Content-Transfer-Encoding', respargs['headers']['Access-Control-Allow-Headers'])
         self.assertEqual('', respargs['headers']['Access-Control-Allow-Methods'])
         self.assertEqual('http://127.0.0.1', respargs['headers']['Access-Control-Allow-Origin'])
 
@@ -90,9 +90,10 @@ class Test_create_json_response(AddressimoTestCase):
         respargs = self.mockResponse.call_args[1]
         self.assertEqual(200, respargs['status'])
         self.assertEqual('application/json', respargs['mimetype'])
-        self.assertEqual('X-Requested-With, accept, content-type', respargs['headers']['Access-Control-Allow-Headers'])
+        self.assertEqual('X-Identity, X-Signature, X-Requested-With, accept, content-type, Content-Transfer-Encoding', respargs['headers']['Access-Control-Allow-Headers'])
         self.assertEqual('PUT, POST, OPTIONS', respargs['headers']['Access-Control-Allow-Methods'])
-        self.assertNotIn('Access-Control-Allow-Origin', respargs['headers'])
+        self.assertIn('Access-Control-Allow-Origin', respargs['headers'])
+        self.assertEqual('*', respargs['headers']['Access-Control-Allow-Origin'])
 
     def test_message_message_success_override(self):
 
@@ -107,7 +108,7 @@ class Test_create_json_response(AddressimoTestCase):
         respargs = self.mockResponse.call_args[1]
         self.assertEqual(200, respargs['status'])
         self.assertEqual('application/json', respargs['mimetype'])
-        self.assertEqual('X-Requested-With, accept, content-type', respargs['headers']['Access-Control-Allow-Headers'])
+        self.assertEqual('X-Identity, X-Signature, X-Requested-With, accept, content-type, Content-Transfer-Encoding', respargs['headers']['Access-Control-Allow-Headers'])
         self.assertEqual('PUT, POST, OPTIONS', respargs['headers']['Access-Control-Allow-Methods'])
         self.assertEqual('http://127.0.0.1', respargs['headers']['Access-Control-Allow-Origin'])
 
@@ -124,7 +125,7 @@ class Test_create_json_response(AddressimoTestCase):
         respargs = self.mockResponse.call_args[1]
         self.assertEqual(204, respargs['status'])
         self.assertEqual('application/json', respargs['mimetype'])
-        self.assertEqual('X-Requested-With, accept, content-type', respargs['headers']['Access-Control-Allow-Headers'])
+        self.assertEqual('X-Identity, X-Signature, X-Requested-With, accept, content-type, Content-Transfer-Encoding', respargs['headers']['Access-Control-Allow-Headers'])
         self.assertEqual('PUT, POST, OPTIONS', respargs['headers']['Access-Control-Allow-Methods'])
         self.assertEqual('http://127.0.0.1', respargs['headers']['Access-Control-Allow-Origin'])
 
@@ -335,12 +336,14 @@ class TestRequiresValidSignature(AddressimoTestCase):
         from ecdsa.curves import SECP256k1
 
         self.sk = SigningKey.from_string(TEST_PRIVKEY.decode('hex'), curve=SECP256k1)
-        sig = self.sk.sign(self.mockRequest.url + self.mockRequest.data, hashfunc=sha256, sigencode=sigencode_der)
+        sig = self.sk.sign('GETaddressimo.com/address/0123456789abcdef/sfthis is some crazy random data, dude! you know you gotta love this!', hashfunc=sha256, sigencode=sigencode_der)
 
         self.mockRequest.headers = {
             'x-identity': VerifyingKey.from_string(TEST_PUBKEY.decode('hex'), curve=curves.SECP256k1).to_der().encode('hex'),
             'x-signature': sig.encode('hex')
         }
+        self.mockRequest.method = 'GET'
+        self.mockRequest.path = '/address/0123456789abcdef/sf'
 
         self.mockIdObj = Mock()
         self.mockIdObj.auth_public_key = TEST_PUBKEY

@@ -9,6 +9,7 @@ import time
 from collections import defaultdict
 from datetime import datetime
 from ecdsa import VerifyingKey
+from ecdsa.der import UnexpectedDER
 from ecdsa.util import sigdecode_der
 from flask import request, Response
 from hashlib import sha256
@@ -217,7 +218,12 @@ def submit_paymentprotocol_message(id=None, tx_id=None, ignore_pubkey_verify=Fal
             text_identity = 'receiver'
 
         # Determine Possible Values the sender_public_key could have
-        vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+        try:
+            vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+        except UnexpectedDER as e:
+            log.warn('X-Identity Public Key Not in SEC or DER Format')
+            return create_json_response(False, 'X-Identity Not Valid SEC or DER ECDSA Public Key', 400)
+
         pk_vals = [vk.to_der().encode('hex'), to_sec(vk, False).encode('hex'), to_sec(vk, True).encode('hex')]
 
         # Verify the Sender is the message signer
@@ -280,7 +286,12 @@ def delete_paymentprotocol_message(identifier, message_type, id=None, tx_id=None
     if tx_id:
         messages = resolver.get_paymentprotocol_messages(tx_id=tx_id)
 
-    vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+    try:
+        vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+    except UnexpectedDER as e:
+        log.warn('X-Identity Public Key Not in SEC or DER Format')
+        return create_json_response(False, 'X-Identity Not Valid SEC or DER ECDSA Public Key', 400)
+
     allowed_keys = [vk.to_der(), to_sec(vk, False), to_sec(vk, True)]
 
     for transaction_id, tx in messages.iteritems():
@@ -304,7 +315,10 @@ def delete_paymentprotocol_message(identifier, message_type, id=None, tx_id=None
 
             elif isinstance(parsed_msg, ProtocolMessage) and parsed_msg.message_type == ProtocolMessageType.Value('INVOICE_REQUEST'):
 
-                if parsed_msg.message_type == 'InvoiceRequest' and (parsed_msg.sender_public_key in allowed_keys or id == tx.get('receiver')):
+                ir = InvoiceRequest()
+                ir.ParseFromString(parsed_msg.serialized_message)
+
+                if parsed_msg.message_type == ProtocolMessageType.Value('INVOICE_REQUEST') and (ir.sender_public_key in allowed_keys or id == tx.get('receiver')):
 
                     if resolver.delete_paymentprotocol_message(identifier.decode('hex'), message_type, tx_id=transaction_id):
                         log.info('Deleted PaymentProtocol Message [TYPE: %s | TX: %s]' % (message_type.upper(), transaction_id))
@@ -327,7 +341,12 @@ def process_invoicerequest(message, id):
         invoice_request.ParseFromString(message.serialized_message)
 
         # Validate Public Key
-        vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+        try:
+            vk = from_sec(request.headers.get('x-identity').decode('hex')) or VerifyingKey.from_der(request.headers.get('x-identity').decode('hex'))
+        except UnexpectedDER as e:
+            log.warn('X-Identity Public Key Not in SEC or DER Format')
+            return create_json_response(False, 'X-Identity Not Valid SEC or DER ECDSA Public Key', 400)
+
         allowed_keys = [vk.to_der(), to_sec(vk, False), to_sec(vk, True)]
 
         if invoice_request.sender_public_key not in allowed_keys:

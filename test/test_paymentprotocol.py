@@ -295,6 +295,7 @@ class TestGetPaymentProtocolMessages(AddressimoTestCase):
         self.patcher103 = patch('addressimo.storeforward.request')
         self.patcher104 = patch('addressimo.storeforward.get_id')
         self.patcher105 = patch('addressimo.storeforward.PluginManager')
+        self.patcher106 = patch('addressimo.util.from_sec')
 
         self.mockGetId = self.patcher100.start()
         self.mockVerifyingKey = self.patcher101.start()
@@ -302,12 +303,17 @@ class TestGetPaymentProtocolMessages(AddressimoTestCase):
         self.mockSFRequest = self.patcher103.start()
         self.mockSFGetId = self.patcher104.start()
         self.mockSFPluginManager = self.patcher105.start()
+        self.mockFromSec = self.patcher106.start()
 
         self.mockSFRequest.headers = {
             'x-identity': self.mockSFPluginManager.get_plugin.return_value.get_id_obj.return_value.auth_public_key
         }
 
-        self.mockVerifyingKey.from_string.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockFromSec.return_value = None
+        self.mockUtilRequest.url = 'https://%s/path' % config.site_url
+        self.mockUtilRequest.path = '/path'
         #################################################################
 
     def test_go_right_id_epm(self):
@@ -419,6 +425,7 @@ class TestSubmitPaymentProtocolMessage(AddressimoTestCase):
         self.patcher7 = patch('addressimo.paymentprotocol.process_invoicerequest')
         self.patcher8 = patch('addressimo.paymentprotocol.process_paymentrequest')
         self.patcher9 = patch('addressimo.paymentprotocol.time')
+        self.patcher10 = patch('addressimo.paymentprotocol.VerifyingKey')
 
         self.mockPluginManager = self.patcher1.start()
         self.mockRequest = self.patcher2.start()
@@ -429,6 +436,7 @@ class TestSubmitPaymentProtocolMessage(AddressimoTestCase):
         self.mockProcessInvoiceRequest = self.patcher7.start()
         self.mockProcessPaymentRequest = self.patcher8.start()
         self.mockTime = self.patcher9.start()
+        self.mockLocalVerifyingKey = self.patcher10.start()
 
         self.mockResolver = MagicMock()
         self.mockPluginManager.get_plugin.return_value = self.mockResolver
@@ -452,6 +460,8 @@ class TestSubmitPaymentProtocolMessage(AddressimoTestCase):
         self.pm = build_pm()
         self.mockParsePaymentProtocolMessage.return_value = self.epm
         self.mockTime.time.return_value = 1
+        self.mockLocalVerifyingKey.from_der.return_value = MagicMock()
+        self.mockLocalVerifyingKey.from_der.return_value.to_der.return_value = 'deadbeef'
 
         #################################################################
         # Mock to Pass @requires_valid_signature & @requires_public_key
@@ -461,6 +471,7 @@ class TestSubmitPaymentProtocolMessage(AddressimoTestCase):
         self.patcher103 = patch('addressimo.storeforward.request')
         self.patcher104 = patch('addressimo.storeforward.get_id')
         self.patcher105 = patch('addressimo.storeforward.PluginManager')
+        self.patcher106 = patch('addressimo.util.from_sec')
 
         self.mockGetId = self.patcher100.start()
         self.mockVerifyingKey = self.patcher101.start()
@@ -468,12 +479,17 @@ class TestSubmitPaymentProtocolMessage(AddressimoTestCase):
         self.mockSFRequest = self.patcher103.start()
         self.mockSFGetId = self.patcher104.start()
         self.mockSFPluginManager = self.patcher105.start()
+        self.mockFromSec = self.patcher106.start()
 
         self.mockSFRequest.headers = {
             'x-identity': self.mockSFPluginManager.get_plugin.return_value.get_id_obj.return_value.auth_public_key
         }
 
-        self.mockVerifyingKey.from_string.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockFromSec.return_value = None
+        self.mockUtilRequest.url = 'https://%s/path' % config.site_url
+        self.mockUtilRequest.path = '/path'
         #################################################################
 
     def test_go_right_id_payment_request(self):
@@ -698,6 +714,7 @@ class TestSubmitPaymentProtocolMessage(AddressimoTestCase):
     def test_mismatched_x_identity(self):
 
         self.mockRequest.headers['x-identity'] = 'not_matching'.encode('hex')
+        self.mockLocalVerifyingKey.from_der.return_value.to_der.return_value = 'not_matching'
 
         submit_paymentprotocol_message(id='id')
 
@@ -770,12 +787,14 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.patcher3 = patch('addressimo.paymentprotocol.create_json_response')
         self.patcher4 = patch('addressimo.paymentprotocol.request')
         self.patcher5 = patch('addressimo.paymentprotocol.parse_paymentprotocol_message')
+        self.patcher6 = patch('addressimo.paymentprotocol.VerifyingKey')
 
         self.mockPluginManager = self.patcher1.start()
         self.mockVerifyPublicKey = self.patcher2.start()
         self.mockCreateJsonResponse = self.patcher3.start()
         self.mockRequest = self.patcher4.start()
         self.mockParsePaymentProtocolMessage = self.patcher5.start()
+        self.mockLocalVerifyingKey = self.patcher6.start()
 
         self.mockResolver = MagicMock()
         self.mockPluginManager.get_plugin.return_value = self.mockResolver
@@ -796,6 +815,8 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.epm = build_epm()
         self.pm = build_pm()
         self.mockParsePaymentProtocolMessage.return_value = self.epm
+        self.mockLocalVerifyingKey.from_der.return_value = MagicMock()
+        self.mockLocalVerifyingKey.from_der.return_value.to_der.return_value = 'deadbeef'
 
         #################################################################
         # Mock to Pass @requires_valid_signature & @requires_public_key
@@ -805,6 +826,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.patcher103 = patch('addressimo.storeforward.request')
         self.patcher104 = patch('addressimo.storeforward.get_id')
         self.patcher105 = patch('addressimo.storeforward.PluginManager')
+        self.patcher106 = patch('addressimo.util.from_sec')
 
         self.mockGetId = self.patcher100.start()
         self.mockVerifyingKey = self.patcher101.start()
@@ -812,17 +834,21 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.mockSFRequest = self.patcher103.start()
         self.mockSFGetId = self.patcher104.start()
         self.mockSFPluginManager = self.patcher105.start()
+        self.mockFromSec = self.patcher106.start()
 
         self.mockSFRequest.headers = {
             'x-identity': self.mockSFPluginManager.get_plugin.return_value.get_id_obj.return_value.auth_public_key
         }
 
-        self.mockVerifyingKey.from_string.return_value.verify.return_value = True
+        self.mockVerifyingKey.from_der.return_value.verify.return_value = True
+        self.mockFromSec.return_value = None
+        self.mockUtilRequest.url =  'https://%s/path' % config.site_url
+        self.mockUtilRequest.path = '/path'
         #################################################################
 
     def test_go_right_id(self):
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='id')
 
         self.assertTrue(self.mockPluginManager.get_plugin.called)
         self.assertTrue(self.mockVerifyPublicKey.called)
@@ -837,7 +863,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.assertEqual('msg1', self.mockParsePaymentProtocolMessage.call_args[0][0])
 
         self.assertTrue(self.mockResolver.delete_paymentprotocol_message.called)
-        self.assertEqual('msg_identifier', self.mockResolver.delete_paymentprotocol_message.call_args[0][0])
+        self.assertEqual('tx_identifier', self.mockResolver.delete_paymentprotocol_message.call_args[0][0])
         self.assertEqual('invoice_request', self.mockResolver.delete_paymentprotocol_message.call_args[0][1])
         self.assertEqual('tx_id1', self.mockResolver.delete_paymentprotocol_message.call_args[1]['tx_id'])
 
@@ -848,7 +874,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
     def test_go_right_txid(self):
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', tx_id='tx_id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', tx_id='tx_id')
 
         self.assertTrue(self.mockPluginManager.get_plugin.called)
         self.assertFalse(self.mockVerifyPublicKey.called)
@@ -860,7 +886,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.assertEqual('msg1', self.mockParsePaymentProtocolMessage.call_args[0][0])
 
         self.assertTrue(self.mockResolver.delete_paymentprotocol_message.called)
-        self.assertEqual('msg_identifier', self.mockResolver.delete_paymentprotocol_message.call_args[0][0])
+        self.assertEqual('tx_identifier', self.mockResolver.delete_paymentprotocol_message.call_args[0][0])
         self.assertEqual('invoice_request', self.mockResolver.delete_paymentprotocol_message.call_args[0][1])
         self.assertEqual('tx_id1', self.mockResolver.delete_paymentprotocol_message.call_args[1]['tx_id'])
 
@@ -877,7 +903,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.pm.serialized_message = ir.SerializeToString()
         self.mockParsePaymentProtocolMessage.return_value = self.pm
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', tx_id='tx_id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', tx_id='tx_id')
 
         self.assertTrue(self.mockCreateJsonResponse.called)
         self.assertEqual(204, self.mockCreateJsonResponse.call_args[0][2])
@@ -892,7 +918,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
         self.pm.serialized_message = ir.SerializeToString()
         self.mockParsePaymentProtocolMessage.return_value = self.pm
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='receiver_id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='receiver_id')
 
         self.assertTrue(self.mockCreateJsonResponse.called)
         self.assertEqual(204, self.mockCreateJsonResponse.call_args[0][2])
@@ -901,14 +927,14 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
         self.mockVerifyPublicKey.return_value = 'nope'
 
-        ret = delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='id')
+        ret = delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='id')
 
         self.assertEqual('nope', ret)
         self.assertFalse(self.mockResolver.get_id_obj.called)
 
     def test_noid_notxid(self):
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request')
 
         self.assertFalse(self.mockResolver.get_id_obj.called)
 
@@ -921,7 +947,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
         self.mockResolver.get_id_obj.side_effect = Exception()
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='id')
 
         self.assertFalse(self.mockResolver.get_paymentprotocol_messages.called)
 
@@ -934,7 +960,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
         self.mockResolver.get_id_obj.return_value = None
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='id')
 
         self.assertFalse(self.mockResolver.get_paymentprotocol_messages.called)
 
@@ -947,7 +973,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
         self.mockResolver.get_paymentprotocol_messages.return_value = {}
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='id')
 
         self.assertFalse(self.mockResolver.delete_paymentprotocol_message.called)
 
@@ -958,9 +984,9 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
     def test_identity_not_allowed(self):
 
-        self.mockRequest.headers['x-identity'] = 'wrong_key'.encode('hex')
+        self.mockLocalVerifyingKey.from_der.return_value.to_der.return_value = 'wrong_key'
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='id')
 
         self.assertFalse(self.mockResolver.delete_paymentprotocol_message.called)
 
@@ -973,12 +999,12 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
         self.mockResolver.delete_paymentprotocol_message.return_value = False
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='id')
 
         self.assertTrue(self.mockCreateJsonResponse.called)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
-        self.assertEqual('Payment Protocol Message Delete Failed, Try Again Later', self.mockCreateJsonResponse.call_args[0][1])
-        self.assertEqual(503, self.mockCreateJsonResponse.call_args[0][2])
+        self.assertEqual('Payment Protocol Message Does Not Exist', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual(404, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_delete_failure_pm_only(self):
 
@@ -990,7 +1016,7 @@ class TestDeletePaymentProtocolMessage(AddressimoTestCase):
 
         self.mockResolver.delete_paymentprotocol_message.return_value = False
 
-        delete_paymentprotocol_message('msg_identifier'.encode('hex'), 'invoice_request', id='id')
+        delete_paymentprotocol_message('tx_identifier'.encode('hex'), 'invoice_request', id='id')
 
         self.assertTrue(self.mockCreateJsonResponse.called)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
@@ -1043,6 +1069,7 @@ class TestProcessInvoiceRequest(AddressimoTestCase):
         self.mockRequest.headers = {
             'x-identity': self.sender_sk.get_verifying_key().to_der().encode('hex')
         }
+        self.mockRequest.host_url = 'https://%s' % config.site_url
 
     def test_go_right_epm(self):
 
@@ -1077,7 +1104,7 @@ class TestProcessInvoiceRequest(AddressimoTestCase):
         sigIR.MergeFrom(self.invoice_request)
         sigIR.signature = ""
         self.assertEqual(sigIR.SerializeToString(), self.mockCrypto.verify.call_args[0][2])
-        self.assertEqual("sha1", self.mockCrypto.verify.call_args[0][3])
+        self.assertEqual("sha256", self.mockCrypto.verify.call_args[0][3])
 
         self.assertEqual(1, self.mockResolver.add_paymentprotocol_message.call_count)
         self.assertEqual(self.pm, self.mockResolver.add_paymentprotocol_message.call_args[0][0])
@@ -1098,7 +1125,7 @@ class TestProcessInvoiceRequest(AddressimoTestCase):
 
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
-        self.assertEqual('InvoiceRequest Public Key Does Not Match X-Identity Public Key', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual('X-Identity Not Valid SEC or DER ECDSA Public Key', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(400, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_cert_no_signature(self):
@@ -1138,7 +1165,7 @@ class TestProcessInvoiceRequest(AddressimoTestCase):
 
         self.assertEqual(1, self.mockCreateJsonResponse.call_count)
         self.assertFalse(self.mockCreateJsonResponse.call_args[0][0])
-        self.assertEqual('Signature Verification Error', self.mockCreateJsonResponse.call_args[0][1])
+        self.assertEqual('InvoiceRequest Signature Verification Error', self.mockCreateJsonResponse.call_args[0][1])
         self.assertEqual(401, self.mockCreateJsonResponse.call_args[0][2])
 
     def test_add_paymentprotocol_message_failure(self):
