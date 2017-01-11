@@ -115,7 +115,7 @@ def register_bip75_endpoint():
     return StoreForward.register(paymentprotocol_only=True)
 
 @app.route('/address/<id>/paymentprotocol', methods=['GET'])
-@limiter.limit("10 per minute")
+@limiter.limit("1000 per second")
 def get_pp_messages(id):
     return get_paymentprotocol_messages(id=id)
 
@@ -130,7 +130,7 @@ def delete_pp_messag(id, identifier, message_type):
     return delete_paymentprotocol_message(identifier, message_type, id=id)
 
 @app.route('/paymentprotocol/<tx_id>', methods=['GET'])
-@limiter.limit("10 per minute")
+@limiter.limit("1000 per second")
 def get_pp_tx_messages(tx_id):
     return get_paymentprotocol_messages(tx_id=tx_id, ignore_pubkey_verify=True)
 
@@ -140,7 +140,7 @@ def submit_pp_tx_message(tx_id):
     return submit_paymentprotocol_message(tx_id=tx_id, ignore_pubkey_verify=True)
 
 @app.route('/paymentprotocol/<tx_id>/<identifier>/<message_type>', methods=['DELETE'])
-@limiter.limit("10 per minute")
+@limiter.limit("100 per minute")
 def delete_pp_tx_message(tx_id, identifier, message_type):
     return delete_paymentprotocol_message(identifier, message_type, tx_id=tx_id)
 
