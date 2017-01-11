@@ -34,7 +34,8 @@ RUN useradd -ms /bin/bash addressimo
 #RUN chown addressimo:addressimo /home/addressimo
 
 # Setup Addressimo
-RUN su addressimo -c "cd && git clone https://github.com/netkicorp/addressimo.git"
+RUN mkdir /home/addressimo/addressimo/
+ADD . /home/addressimo/addressimo/
 RUN pip install -r /home/addressimo/addressimo/requirements.txt && pip install gunicorn supervisor-stdout supervisor
 ENV ADDRESSIMO_REDIS_URI ${REDISURI}
 

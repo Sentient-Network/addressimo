@@ -32,7 +32,8 @@ RUN adduser -g "Addressimo User" -s /bin/bash -h /home/addressimo -D addressimo
 # Setup Addressimo
 USER addressimo
 WORKDIR /home/addressimo
-RUN git clone https://github.com/netkicorp/addressimo.git
+RUN mkdir /home/addressimo/addressimo/
+ADD . /home/addressimo/addressimo/
 
 USER root
 RUN pip install -r /home/addressimo/addressimo/requirements.txt && pip install gunicorn supervisor-stdout supervisor
