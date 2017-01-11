@@ -55,7 +55,7 @@ RUN chmod 400 /etc/ssl/addressimo.key
 RUN service nginx stop
 RUN service redis-server stop
 
-EXPOSE 80 443
+EXPOSE 80 443 5000
 
 # start supervisor to run our wsgi server
 ENTRYPOINT ["supervisord", "-c", "/etc/supervisord.conf", "-n"]
