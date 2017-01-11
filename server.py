@@ -23,7 +23,7 @@ app.config.update(
     RATELIMIT_HEADERS_ENABLED=False
 )
 
-CORS(app)
+CORS(app, send_wildcard=True)
 
 # ###########################################
 # Setup Pre-Request Processing
